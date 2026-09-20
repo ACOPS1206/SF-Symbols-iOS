@@ -4,6 +4,7 @@ struct DownloadsView: View {
     let records: [DownloadRecord]
     let symbolCount: Int
     let onDownloadAll: () -> Void
+    let onShareAll: () -> Void
     let onClearHistory: () -> Void
 
     var body: some View {
@@ -29,15 +30,26 @@ struct DownloadsView: View {
                     Image(systemName: "square.stack.3d.up.fill")
                         .font(.title2)
                 }
-                Button(action: onDownloadAll) {
-                    Label("전체 아이콘 ZIP 저장", systemImage: "arrow.down.doc.fill")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .foregroundStyle(Color(.systemBackground))
-                        .background(Color.accentColor, in: Capsule())
+                HStack(spacing: 12) {
+                    Button(action: onShareAll) {
+                        Label("ZIP 공유", systemImage: "square.and.arrow.up")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .adaptiveGlass(cornerRadius: 25, interactive: true)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: onDownloadAll) {
+                        Label("ZIP 저장", systemImage: "arrow.down.doc.fill")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .foregroundStyle(Color(.systemBackground))
+                            .background(Color.accentColor, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
             .padding(18)
             .adaptiveGlass(cornerRadius: 26)

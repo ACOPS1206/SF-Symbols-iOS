@@ -6,6 +6,7 @@ struct SymbolDetailView: View {
     @Binding var settings: ExportSettings
     let onToggleFavorite: () -> Void
     let onExport: () -> Void
+    let onShare: () -> Void
 
     @Environment(\.dismiss) private var dismiss
 
@@ -15,18 +16,29 @@ struct SymbolDetailView: View {
                 VStack(spacing: 20) {
                     preview
                     settingsForm
-                    Button(action: onExport) {
-                        Label("\(settings.format.rawValue)로 저장", systemImage: "arrow.down.doc.fill")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
-                            .foregroundStyle(Color(.systemBackground))
-                            .background(Color.accentColor, in: Capsule())
+                    HStack(spacing: 12) {
+                        Button(action: onShare) {
+                            Label("공유", systemImage: "square.and.arrow.up")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 52)
+                                .adaptiveGlass(cornerRadius: 26, interactive: true)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(action: onExport) {
+                            Label("저장", systemImage: "arrow.down.doc.fill")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 52)
+                                .foregroundStyle(Color(.systemBackground))
+                                .background(Color.accentColor, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
 
                     if settings.format == .svg {
-                        Label("SVG에는 원본 벡터 경로 대신 PNG 이미지가 포함됩니다.", systemImage: "info.circle")
+                        Label(svgDescription, systemImage: "info.circle")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -94,10 +106,19 @@ struct SymbolDetailView: View {
 
             Divider().padding(.leading, 44)
 
-            settingRow("크기", systemImage: "arrow.up.left.and.arrow.down.right") {
-                Picker("크기", selection: $settings.size) {
-                    ForEach([128, 256, 512, 1024], id: \.self) { size in
-                        Text("\(size) px").tag(size)
+            if settings.format == .svg {
+                settingRow("SVG로 변환", systemImage: "point.3.connected.trianglepath.dotted") {
+                    Toggle("SVG로 변환", isOn: vectorizesSVGBinding)
+                        .labelsHidden()
+                }
+            }
+
+            if !settings.usesVectorSVG {
+                settingRow(settings.format == .svg ? "포함 PNG" : "크기", systemImage: "arrow.up.left.and.arrow.down.right") {
+                    Picker(settings.format == .svg ? "포함 PNG" : "크기", selection: $settings.size) {
+                        ForEach([128, 256, 512, 1024], id: \.self) { size in
+                            Text("\(size) px").tag(size)
+                        }
                     }
                 }
             }
@@ -114,10 +135,12 @@ struct SymbolDetailView: View {
 
             Divider().padding(.leading, 44)
 
-            settingRow("렌더링", systemImage: "circle.lefthalf.filled") {
-                Picker("렌더링", selection: $settings.renderingStyle) {
-                    ForEach(SymbolRenderingStyle.allCases) { style in
-                        Text(style.rawValue).tag(style)
+            if !settings.usesVectorSVG {
+                settingRow("렌더링", systemImage: "circle.lefthalf.filled") {
+                    Picker("렌더링", selection: $settings.renderingStyle) {
+                        ForEach(SymbolRenderingStyle.allCases) { style in
+                            Text(style.rawValue).tag(style)
+                        }
                     }
                 }
             }
@@ -158,6 +181,25 @@ struct SymbolDetailView: View {
         }
         .padding(.horizontal, 14)
         .adaptiveGlass(cornerRadius: 24)
+    }
+
+    private var vectorizesSVGBinding: Binding<Bool> {
+        Binding(
+            get: { settings.vectorizesSVG },
+            set: { enabled in
+                settings.vectorizesSVG = enabled
+                if enabled {
+                    settings.renderingStyle = .monochrome
+                }
+            }
+        )
+    }
+
+    private var svgDescription: String {
+        if settings.usesVectorSVG {
+            return "고해상도 윤곽선을 추적해 단색 SVG 경로로 변환합니다. 결과는 원본 벡터와 다를 수 있습니다."
+        }
+        return "호환 SVG에는 벡터 경로 대신 선택한 해상도의 PNG가 포함됩니다."
     }
 
     private func settingRow<Control: View>(
