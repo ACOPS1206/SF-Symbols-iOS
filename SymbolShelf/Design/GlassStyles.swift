@@ -21,20 +21,8 @@ extension View {
 
 struct AmbientBackground: View {
     var body: some View {
-        ZStack {
-            Color(.systemGroupedBackground)
-            Circle()
-                .fill(.blue.opacity(0.18))
-                .frame(width: 300, height: 300)
-                .blur(radius: 70)
-                .offset(x: -160, y: -300)
-            Circle()
-                .fill(.purple.opacity(0.14))
-                .frame(width: 280, height: 280)
-                .blur(radius: 80)
-                .offset(x: 180, y: 250)
-        }
-        .ignoresSafeArea()
-        .accessibilityHidden(true)
+        Color(.systemGroupedBackground)
+            .ignoresSafeArea()
+            .accessibilityHidden(true)
     }
 }
