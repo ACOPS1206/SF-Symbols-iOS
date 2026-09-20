@@ -2,23 +2,14 @@ import SwiftUI
 import UniformTypeIdentifiers
 import UIKit
 
-private struct CategoryBoundsPreferenceKey: PreferenceKey {
-    static let defaultValue: [String: Anchor<CGRect>] = [:]
-
-    static func reduce(
-        value: inout [String: Anchor<CGRect>],
-        nextValue: () -> [String: Anchor<CGRect>]
-    ) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
-    }
-}
-
 struct ContentView: View {
     private let columns = [GridItem(.adaptive(minimum: 104, maximum: 150), spacing: 12)]
+    private let categorySpacing: CGFloat = 6
 
     @State private var currentSection: AppSection = .icons
     @State private var query = ""
     @State private var category: SymbolCategory = .all
+    @State private var highlightedCategory: SymbolCategory = .all
     @State private var selection = Set<String>()
     @State private var selectedSymbol: SymbolItem?
     @State private var isSelecting = false
@@ -216,30 +207,26 @@ struct ContentView: View {
     @available(iOS 26.0, *)
     private var liquidGlassCategoryBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(SymbolCategory.allCases) { option in
-                    categoryButton(option)
+            ZStack(alignment: .leading) {
+                ZStack {
+                    Capsule()
+                        .fill(Color.primary.opacity(0.18))
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.30), lineWidth: 1)
                 }
-            }
-            .backgroundPreferenceValue(CategoryBoundsPreferenceKey.self) { bounds in
-                GeometryReader { proxy in
-                    if let anchor = bounds[category.id] {
-                        let frame = proxy[anchor]
-                        ZStack {
-                            Capsule()
-                                .fill(Color.accentColor.opacity(0.18))
-                            Capsule()
-                                .stroke(Color.accentColor.opacity(0.32), lineWidth: 1)
-                        }
-                        .frame(width: frame.width, height: frame.height)
-                        .position(x: frame.midX, y: frame.midY)
-                        .animation(
-                            .spring(response: 0.34, dampingFraction: 0.82),
-                            value: category
-                        )
+                .frame(width: categoryWidth(highlightedCategory), height: 34)
+                .offset(x: categoryOffset(highlightedCategory))
+                .animation(
+                    .spring(response: 0.42, dampingFraction: 0.78),
+                    value: highlightedCategory
+                )
+                .allowsHitTesting(false)
+
+                HStack(spacing: categorySpacing) {
+                    ForEach(SymbolCategory.allCases) { option in
+                        categoryButton(option)
                     }
                 }
-                .allowsHitTesting(false)
             }
         }
         .contentMargins(.horizontal, 12, for: .scrollContent)
@@ -250,16 +237,14 @@ struct ContentView: View {
 
     @available(iOS 26.0, *)
     private func categoryButton(_ option: SymbolCategory) -> some View {
-        let isSelected = category == option
+        let isSelected = highlightedCategory == option
         return Button {
             selectCategory(option)
         } label: {
             categoryLabel(option, isSelected: isSelected)
+                .frame(width: categoryWidth(option))
         }
         .buttonStyle(.plain)
-        .anchorPreference(key: CategoryBoundsPreferenceKey.self, value: .bounds) {
-            [option.id: $0]
-        }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -278,7 +263,10 @@ struct ContentView: View {
 
     private var segmentedCategoryBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            Picker("카테고리", selection: $category) {
+            Picker("카테고리", selection: Binding(
+                get: { category },
+                set: { selectCategory($0) }
+            )) {
                 ForEach(SymbolCategory.allCases) { option in
                     Label(option.rawValue, systemImage: option.icon)
                         .labelStyle(.titleAndIcon)
@@ -296,7 +284,29 @@ struct ContentView: View {
     }
 
     private func selectCategory(_ option: SymbolCategory) {
-        category = option
+        guard option != highlightedCategory else { return }
+
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) {
+            highlightedCategory = option
+        }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            category = option
+        }
+    }
+
+    private func categoryWidth(_ option: SymbolCategory) -> CGFloat {
+        72 + CGFloat(max(0, option.rawValue.count - 2)) * 15
+    }
+
+    private func categoryOffset(_ option: SymbolCategory) -> CGFloat {
+        guard let index = SymbolCategory.allCases.firstIndex(of: option) else { return 0 }
+        let preceding = SymbolCategory.allCases[..<index]
+        return preceding.reduce(0) { result, category in
+            result + categoryWidth(category) + categorySpacing
+        }
     }
 
     @ViewBuilder
@@ -327,7 +337,7 @@ struct ContentView: View {
             Button {
                 showsFill = false
                 showsSlash = false
-                category = .all
+                selectCategory(.all)
                 query = ""
             } label: {
                 Label("필터 초기화", systemImage: "arrow.counterclockwise")
