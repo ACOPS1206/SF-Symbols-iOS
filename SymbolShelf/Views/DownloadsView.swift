@@ -34,7 +34,7 @@ struct DownloadsView: View {
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
-                        .foregroundStyle(.black)
+                        .foregroundStyle(Color(.systemBackground))
                         .background(Color.accentColor, in: Capsule())
                 }
                 .buttonStyle(.plain)

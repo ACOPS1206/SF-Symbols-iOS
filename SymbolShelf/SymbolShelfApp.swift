@@ -8,12 +8,11 @@ struct SymbolShelfApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .tint(AccentChoice(rawValue: accentChoice)?.color ?? .white)
+                .tint(AccentChoice(rawValue: accentChoice)?.color ?? .primary)
                 .environment(
                     \.locale,
                     Locale(identifier: AppLanguage(rawValue: appLanguage)?.localeIdentifier ?? "ko")
                 )
-                .preferredColorScheme(.dark)
         }
     }
 }

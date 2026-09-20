@@ -172,6 +172,9 @@ struct ContentView: View {
                         .padding(.bottom, 20)
                 }
             }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                categoryBar
+            }
             .navigationTitle(searchEnabled ? "검색" : "아이콘")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -187,6 +190,25 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    private var categoryBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            Picker("카테고리", selection: $category) {
+                ForEach(SymbolCategory.allCases) { option in
+                    Label(option.rawValue, systemImage: option.icon)
+                        .labelStyle(.titleAndIcon)
+                        .tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .controlSize(.large)
+            .frame(width: CGFloat(SymbolCategory.allCases.count) * 116)
+        }
+        .contentMargins(.horizontal, 16, for: .scrollContent)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+        .accessibilityLabel("카테고리")
     }
 
     @ViewBuilder
@@ -212,11 +234,6 @@ struct ContentView: View {
             }
             Toggle(isOn: $showsSlash) {
                 Label("Slash 보기", systemImage: "circle.slash")
-            }
-            Picker("카테고리", selection: $category) {
-                ForEach(SymbolCategory.allCases) { option in
-                    Label(option.rawValue, systemImage: option.icon).tag(option)
-                }
             }
             Divider()
             Button {
@@ -273,7 +290,7 @@ struct ContentView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.title3)
                             .symbolRenderingMode(.palette)
-                            .foregroundStyle(.black, Color.accentColor)
+                            .foregroundStyle(Color(.systemBackground), Color.accentColor)
                     } else if favorites.contains(selectionKey) {
                         Image(systemName: "heart.fill")
                             .font(.caption)
@@ -337,7 +354,7 @@ struct ContentView: View {
                     .font(.headline)
                     .padding(.horizontal, 16)
                     .frame(height: 44)
-                    .foregroundStyle(.black)
+                    .foregroundStyle(Color(.systemBackground))
                     .background(Color.accentColor, in: Capsule())
             }
             .buttonStyle(.plain)

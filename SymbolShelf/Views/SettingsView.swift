@@ -20,7 +20,7 @@ struct SettingsView: View {
                 Picker("강조 색", selection: $accent) {
                     ForEach(AccentChoice.allCases) { option in
                         Label {
-                            Text(option.rawValue)
+                            Text(option.title)
                         } icon: {
                             Circle()
                                 .fill(option.color)

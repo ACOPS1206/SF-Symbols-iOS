@@ -47,13 +47,17 @@ enum AccentChoice: String, CaseIterable, Identifiable {
 
     var color: Color {
         switch self {
-        case .white: .white
+        case .white: .primary
         case .gray: .gray
         case .orange: .orange
         case .red: .red
         case .green: .green
         case .purple: .purple
         }
+    }
+
+    var title: String {
+        self == .white ? "흰색/검정 (자동)" : rawValue
     }
 }
 

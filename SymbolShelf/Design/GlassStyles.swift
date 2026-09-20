@@ -13,7 +13,7 @@ extension View {
             self.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .stroke(.white.opacity(0.18), lineWidth: 0.5)
+                        .stroke(.primary.opacity(0.14), lineWidth: 0.5)
                 }
         }
     }

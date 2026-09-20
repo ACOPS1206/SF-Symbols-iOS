@@ -20,7 +20,7 @@ struct SymbolDetailView: View {
                             .font(.headline)
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)
-                            .foregroundStyle(.black)
+                            .foregroundStyle(Color(.systemBackground))
                             .background(Color.accentColor, in: Capsule())
                     }
                     .buttonStyle(.plain)
