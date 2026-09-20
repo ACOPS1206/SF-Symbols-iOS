@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Binding var language: AppLanguage
     @Binding var accent: AccentChoice
     @Binding var exportSettings: ExportSettings
+    @Binding var automaticallyGroupsSymbols: Bool
 
     private let repositoryURL = URL(string: "https://github.com/ACOPS1206/SF-Symbols-iOS")!
 
@@ -31,6 +32,22 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.navigationLink)
+            }
+
+            Section {
+                Toggle(isOn: $automaticallyGroupsSymbols) {
+                    HStack(spacing: 7) {
+                        Text("아이콘 자동 분류")
+
+                        Text("[메타]")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("아이콘")
+            } footer: {
+                Text("비슷한 심볼을 부모 아이콘 아래에 자동으로 묶습니다. 끄면 모든 심볼을 개별 아이콘으로 표시합니다.")
             }
 
             Section("기본 다운로드 옵션") {

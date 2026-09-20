@@ -120,7 +120,7 @@ struct SymbolFamilyPickerView: View {
                     .frame(maxWidth: .infinity)
             }
             .padding(12)
-            .frame(minHeight: 120)
+            .frame(maxWidth: .infinity, minHeight: 132, maxHeight: 132)
             .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .adaptiveGlass(cornerRadius: 20, interactive: true)
             .overlay {
@@ -131,6 +131,7 @@ struct SymbolFamilyPickerView: View {
             }
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
         .accessibilityLabel(item.title)
         .accessibilityHint(isSelecting ? "선택 상태를 전환합니다" : "개별 심볼 상세 보기를 엽니다")
     }
