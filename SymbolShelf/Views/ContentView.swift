@@ -27,6 +27,7 @@ struct ContentView: View {
     @AppStorage("favoriteSymbols") private var favoriteSymbols = ""
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.korean.rawValue
     @AppStorage("accentChoice") private var accentChoice = AccentChoice.white.rawValue
+    @AppStorage("automaticallyGroupsSymbols") private var automaticallyGroupsSymbols = true
     @AppStorage("defaultExportSize") private var defaultExportSize = 512
     @AppStorage("defaultExportFormat") private var defaultExportFormat = ExportFormat.png.rawValue
     @AppStorage("defaultExportWeight") private var defaultExportWeight = SymbolWeight.regular.rawValue
@@ -57,7 +58,9 @@ struct ContentView: View {
     }
 
     private var presentedFamilies: [SymbolFamily] {
-        SymbolCatalog.families
+        automaticallyGroupsSymbols
+            ? SymbolCatalog.families
+            : SymbolCatalog.individualFamilies
     }
 
     var body: some View {
@@ -146,7 +149,8 @@ struct ContentView: View {
                     SettingsView(
                         language: languageBinding,
                         accent: accentBinding,
-                        exportSettings: $settings
+                        exportSettings: $settings,
+                        automaticallyGroupsSymbols: $automaticallyGroupsSymbols
                     )
                 }
             }
@@ -398,7 +402,15 @@ struct ContentView: View {
         let hasFavorite = family.variants.contains { favorites.contains($0.name) }
 
         return Button {
-            selectedFamily = family
+            if automaticallyGroupsSymbols && family.variants.count > 1 {
+                selectedFamily = family
+            } else if isSelecting {
+                withAnimation(.snappy) {
+                    toggleSelection(item.name)
+                }
+            } else {
+                selectedSymbol = item
+            }
         } label: {
             VStack(spacing: 10) {
                 ZStack(alignment: .topTrailing) {
@@ -433,7 +445,7 @@ struct ContentView: View {
                 }
             }
             .padding(12)
-            .frame(minHeight: 120)
+            .frame(maxWidth: .infinity, minHeight: 144, maxHeight: 144)
             .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .adaptiveGlass(cornerRadius: 20, interactive: true)
             .overlay {
@@ -444,8 +456,13 @@ struct ContentView: View {
             }
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
         .accessibilityLabel("\(family.title), \(family.variants.count)개 변형")
-        .accessibilityHint("패밀리 안의 개별 심볼을 엽니다")
+        .accessibilityHint(
+            automaticallyGroupsSymbols && family.variants.count > 1
+                ? "패밀리 안의 개별 심볼을 엽니다"
+                : isSelecting ? "선택 상태를 전환합니다" : "심볼 상세 보기를 엽니다"
+        )
     }
 
     private func displayedRepresentative(for family: SymbolFamily) -> SymbolItem {

@@ -24,6 +24,14 @@ enum SymbolCatalog {
         noFillToFill: loadedCatalog.noFillToFill
     )
 
+    static let individualFamilies: [SymbolFamily] = items.map { item in
+        SymbolFamily(
+            key: item.name.lowercased(),
+            representative: item,
+            variants: [item]
+        )
+    }
+
     private static func loadSystemCatalog() -> LoadedCatalog {
         // Force UIKit to load the CoreGlyphs bundle before looking it up.
         _ = UIImage(systemName: "tortoise")
