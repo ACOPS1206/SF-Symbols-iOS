@@ -193,7 +193,60 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
     private var categoryBar: some View {
+        if #available(iOS 26.0, *) {
+            liquidGlassCategoryBar
+        } else {
+            segmentedCategoryBar
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private var liquidGlassCategoryBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(SymbolCategory.allCases) { option in
+                    categoryButton(option)
+                }
+            }
+        }
+        .contentMargins(.horizontal, 12, for: .scrollContent)
+        .contentMargins(.vertical, 6, for: .scrollContent)
+        .frame(minHeight: 54)
+        .accessibilityLabel("카테고리")
+    }
+
+    @available(iOS 26.0, *)
+    @ViewBuilder
+    private func categoryButton(_ option: SymbolCategory) -> some View {
+        if category == option {
+            Button {
+                selectCategory(option)
+            } label: {
+                categoryLabel(option)
+            }
+            .buttonStyle(.glassProminent)
+        } else {
+            Button {
+                selectCategory(option)
+            } label: {
+                categoryLabel(option)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func categoryLabel(_ option: SymbolCategory) -> some View {
+        Label(option.rawValue, systemImage: option.icon)
+            .font(.subheadline.weight(.semibold))
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .frame(minHeight: 36)
+            .contentShape(Capsule())
+    }
+
+    private var segmentedCategoryBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             Picker("카테고리", selection: $category) {
                 ForEach(SymbolCategory.allCases) { option in
@@ -210,6 +263,12 @@ struct ContentView: View {
         .padding(.vertical, 4)
         .frame(minHeight: 52)
         .accessibilityLabel("카테고리")
+    }
+
+    private func selectCategory(_ option: SymbolCategory) {
+        withAnimation(.snappy) {
+            category = option
+        }
     }
 
     @ViewBuilder
