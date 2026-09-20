@@ -2,6 +2,26 @@ import SwiftUI
 
 extension View {
     @ViewBuilder
+    func symbolRenderingStyle(_ settings: ExportSettings) -> some View {
+        switch settings.renderingStyle {
+        case .monochrome:
+            self
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(settings.tint.color)
+        case .hierarchical:
+            self
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(settings.tint.color)
+        case .palette:
+            self
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(settings.tint.color, settings.secondaryTint.color)
+        case .multicolor:
+            self.symbolRenderingMode(.multicolor)
+        }
+    }
+
+    @ViewBuilder
     func adaptiveGlass(cornerRadius: CGFloat = 24, interactive: Bool = false) -> some View {
         if #available(iOS 26.0, *) {
             if interactive {

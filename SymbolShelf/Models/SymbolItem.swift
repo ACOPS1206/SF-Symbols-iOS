@@ -125,8 +125,19 @@ enum ExportBackground: String, CaseIterable, Identifiable, Codable {
     var id: String { rawValue }
 }
 
+enum SymbolRenderingStyle: String, CaseIterable, Identifiable, Codable {
+    case monochrome = "단색"
+    case hierarchical = "계층형"
+    case palette = "팔레트"
+    case multicolor = "멀티컬러"
+
+    var id: String { rawValue }
+}
+
 enum ExportTint: String, CaseIterable, Identifiable, Codable {
     case primary = "기본"
+    case black = "검정"
+    case white = "흰색"
     case blue = "파랑"
     case purple = "보라"
     case red = "빨강"
@@ -138,6 +149,8 @@ enum ExportTint: String, CaseIterable, Identifiable, Codable {
     var color: Color {
         switch self {
         case .primary: .primary
+        case .black: .black
+        case .white: .white
         case .blue: .blue
         case .purple: .purple
         case .red: .red
@@ -149,6 +162,8 @@ enum ExportTint: String, CaseIterable, Identifiable, Codable {
     var uiColor: UIColor {
         switch self {
         case .primary: .label
+        case .black: .black
+        case .white: .white
         case .blue: .systemBlue
         case .purple: .systemPurple
         case .red: .systemRed
@@ -163,5 +178,7 @@ struct ExportSettings: Codable, Equatable {
     var weight: SymbolWeight = .regular
     var format: ExportFormat = .png
     var background: ExportBackground = .transparent
+    var renderingStyle: SymbolRenderingStyle = .hierarchical
     var tint: ExportTint = .primary
+    var secondaryTint: ExportTint = .blue
 }

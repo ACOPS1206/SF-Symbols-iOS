@@ -32,7 +32,9 @@ struct ContentView: View {
     @AppStorage("defaultExportFormat") private var defaultExportFormat = ExportFormat.png.rawValue
     @AppStorage("defaultExportWeight") private var defaultExportWeight = SymbolWeight.regular.rawValue
     @AppStorage("defaultExportBackground") private var defaultExportBackground = ExportBackground.transparent.rawValue
+    @AppStorage("defaultRenderingStyle") private var defaultRenderingStyle = SymbolRenderingStyle.hierarchical.rawValue
     @AppStorage("defaultExportTint") private var defaultExportTint = ExportTint.primary.rawValue
+    @AppStorage("defaultSecondaryTint") private var defaultSecondaryTint = ExportTint.blue.rawValue
     @AppStorage("downloadHistory") private var downloadHistory = Data()
 
     private var favorites: Set<String> {
@@ -79,6 +81,7 @@ struct ContentView: View {
                 SymbolFamilyPickerView(
                     family: family,
                     favorites: favorites,
+                    renderingSettings: settings,
                     selection: $selection,
                     isSelecting: isSelecting,
                     onChoose: { item in
@@ -416,7 +419,7 @@ struct ContentView: View {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: item.name)
                         .font(.system(size: 36, weight: .regular))
-                        .symbolRenderingMode(.hierarchical)
+                        .symbolRenderingStyle(settings)
                         .frame(maxWidth: .infinity, minHeight: 54)
 
                     if selectedCount > 0 {
@@ -490,6 +493,11 @@ struct ContentView: View {
                 Picker("크기", selection: $settings.size) {
                     ForEach([128, 256, 512, 1024], id: \.self) { size in
                         Text("\(size) px").tag(size)
+                    }
+                }
+                Picker("렌더링", selection: $settings.renderingStyle) {
+                    ForEach(SymbolRenderingStyle.allCases) { style in
+                        Text(style.rawValue).tag(style)
                     }
                 }
             } label: {
@@ -579,7 +587,9 @@ struct ContentView: View {
             weight: SymbolWeight(rawValue: defaultExportWeight) ?? .regular,
             format: ExportFormat(rawValue: defaultExportFormat) ?? .png,
             background: ExportBackground(rawValue: defaultExportBackground) ?? .transparent,
-            tint: ExportTint(rawValue: defaultExportTint) ?? .primary
+            renderingStyle: SymbolRenderingStyle(rawValue: defaultRenderingStyle) ?? .hierarchical,
+            tint: ExportTint(rawValue: defaultExportTint) ?? .primary,
+            secondaryTint: ExportTint(rawValue: defaultSecondaryTint) ?? .blue
         )
     }
 
@@ -588,7 +598,9 @@ struct ContentView: View {
         defaultExportWeight = value.weight.rawValue
         defaultExportFormat = value.format.rawValue
         defaultExportBackground = value.background.rawValue
+        defaultRenderingStyle = value.renderingStyle.rawValue
         defaultExportTint = value.tint.rawValue
+        defaultSecondaryTint = value.secondaryTint.rawValue
     }
 
     private func canonicalName(_ name: String) -> String {

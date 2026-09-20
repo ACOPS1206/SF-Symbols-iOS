@@ -3,6 +3,7 @@ import SwiftUI
 struct SymbolFamilyPickerView: View {
     let family: SymbolFamily
     let favorites: Set<String>
+    let renderingSettings: ExportSettings
     @Binding var selection: Set<String>
     let isSelecting: Bool
     let onChoose: (SymbolItem) -> Void
@@ -53,7 +54,7 @@ struct SymbolFamilyPickerView: View {
         HStack(spacing: 16) {
             Image(systemName: family.representative.name)
                 .font(.system(size: 42, weight: .regular))
-                .symbolRenderingMode(.hierarchical)
+                .symbolRenderingStyle(renderingSettings)
                 .frame(width: 72, height: 72)
                 .adaptiveGlass(cornerRadius: 22)
 
@@ -98,7 +99,7 @@ struct SymbolFamilyPickerView: View {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: item.name)
                         .font(.system(size: 36, weight: .regular))
-                        .symbolRenderingMode(.hierarchical)
+                        .symbolRenderingStyle(renderingSettings)
                         .frame(maxWidth: .infinity, minHeight: 54)
 
                     if isSelected {
