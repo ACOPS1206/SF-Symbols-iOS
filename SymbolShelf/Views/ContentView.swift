@@ -66,9 +66,13 @@ struct ContentView: View {
         nativeTabs
             .nativeTabBarBehavior()
             .adaptiveTabAccessory(
-                isEnabled: isSelecting && (currentSection == .icons || currentSection == .search)
+                isEnabled: currentSection == .icons || currentSection == .search
             ) {
-                selectionBar
+                if isSelecting {
+                    selectionBar
+                } else {
+                    categoryBar
+                }
             }
             .sheet(item: $selectedSymbol) { item in
                 SymbolDetailView(
@@ -172,21 +176,18 @@ struct ContentView: View {
                         .padding(.bottom, 20)
                 }
             }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                categoryBar
-            }
             .navigationTitle(searchEnabled ? "검색" : "아이콘")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    filterMenu
-                }
-                ToolbarItem(placement: .topBarTrailing) {
                     Button(isSelecting ? "완료" : "선택") {
                         withAnimation(.snappy) {
                             isSelecting.toggle()
                             if !isSelecting { selection.removeAll() }
                         }
                     }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    filterMenu
                 }
             }
         }
@@ -206,8 +207,8 @@ struct ContentView: View {
             .frame(width: CGFloat(SymbolCategory.allCases.count) * 116)
         }
         .contentMargins(.horizontal, 16, for: .scrollContent)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
+        .padding(.vertical, 4)
+        .frame(minHeight: 52)
         .accessibilityLabel("카테고리")
     }
 
