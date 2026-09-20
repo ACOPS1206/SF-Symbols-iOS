@@ -13,16 +13,44 @@ struct ContentView: View {
     @State private var isSearchPresented = false
     @State private var showsFill = false
     @State private var showsSlash = false
+    @State private var currentSection: AppSection = .icons
     @State private var settings = ExportSettings()
     @State private var exportDocument = BinaryDocument()
     @State private var exportType: UTType = .data
     @State private var exportFilename = "Symbols.zip"
     @State private var isExporting = false
     @State private var exportError: String?
+    @State private var pendingDownload: DownloadRecord?
     @AppStorage("favoriteSymbols") private var favoriteSymbols = ""
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.korean.rawValue
+    @AppStorage("accentChoice") private var accentChoice = AccentChoice.white.rawValue
+    @AppStorage("defaultExportSize") private var defaultExportSize = 512
+    @AppStorage("defaultExportFormat") private var defaultExportFormat = ExportFormat.png.rawValue
+    @AppStorage("defaultExportWeight") private var defaultExportWeight = SymbolWeight.regular.rawValue
+    @AppStorage("defaultExportBackground") private var defaultExportBackground = ExportBackground.transparent.rawValue
+    @AppStorage("defaultExportTint") private var defaultExportTint = ExportTint.primary.rawValue
+    @AppStorage("downloadHistory") private var downloadHistory = Data()
 
     private var favorites: Set<String> {
         Set(favoriteSymbols.split(separator: ",").map(String.init))
+    }
+
+    private var languageBinding: Binding<AppLanguage> {
+        Binding(
+            get: { AppLanguage(rawValue: appLanguage) ?? .korean },
+            set: { appLanguage = $0.rawValue }
+        )
+    }
+
+    private var accentBinding: Binding<AccentChoice> {
+        Binding(
+            get: { AccentChoice(rawValue: accentChoice) ?? .white },
+            set: { accentChoice = $0.rawValue }
+        )
+    }
+
+    private var downloadRecords: [DownloadRecord] {
+        (try? JSONDecoder().decode([DownloadRecord].self, from: downloadHistory)) ?? []
     }
 
     private var presentedCatalog: [SymbolItem] {
@@ -56,30 +84,20 @@ struct ContentView: View {
             ZStack {
                 AmbientBackground()
                 ScrollView {
-                    VStack(spacing: 16) {
-                        if filteredItems.isEmpty {
-                            ContentUnavailableView(
-                                "심볼을 찾을 수 없음",
-                                systemImage: "magnifyingglass",
-                                description: Text("다른 검색어나 카테고리를 사용해 보세요.")
-                            )
-                            .frame(minHeight: 420)
-                        } else {
-                            LazyVGrid(columns: columns, spacing: 12) {
-                                ForEach(filteredItems) { item in
-                                    symbolCell(item)
-                                }
-                            }
-                            .padding(.horizontal)
-                            .padding(.bottom, isSelecting ? 100 : 20)
-                        }
-                    }
+                    sectionContent
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
             .safeAreaInset(edge: .top, spacing: 6) {
                 HStack {
-                    topMenuButton
+                    if currentSection == .icons {
+                        topMenuButton
+                    } else {
+                        Image(systemName: currentSection.icon)
+                            .font(.system(size: 21, weight: .semibold))
+                            .frame(width: 52, height: 52)
+                            .adaptiveGlass(cornerRadius: 26)
+                    }
                     Spacer()
                 }
                 .padding(.horizontal)
@@ -87,7 +105,7 @@ struct ContentView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 10) {
-                    if isSelecting {
+                    if currentSection == .icons && isSelecting {
                         selectionBar
                     }
                     bottomControls
@@ -112,9 +130,15 @@ struct ContentView: View {
                 contentType: exportType,
                 defaultFilename: exportFilename
             ) { result in
-                if case .failure(let error) = result {
+                switch result {
+                case .success:
+                    if let pendingDownload {
+                        addDownloadRecord(pendingDownload)
+                    }
+                case .failure(let error):
                     exportError = error.localizedDescription
                 }
+                pendingDownload = nil
             }
             .alert("내보내기 실패", isPresented: Binding(
                 get: { exportError != nil },
@@ -124,6 +148,48 @@ struct ContentView: View {
             } message: {
                 Text(exportError ?? "알 수 없는 오류가 발생했습니다.")
             }
+            .onAppear(perform: loadDefaultSettings)
+            .onChange(of: settings) { _, newValue in
+                saveDefaultSettings(newValue)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var sectionContent: some View {
+        switch currentSection {
+        case .icons:
+            VStack(spacing: 16) {
+                if filteredItems.isEmpty {
+                    ContentUnavailableView(
+                        "심볼을 찾을 수 없음",
+                        systemImage: "magnifyingglass",
+                        description: Text("다른 검색어나 카테고리를 사용해 보세요.")
+                    )
+                    .frame(minHeight: 420)
+                } else {
+                    LazyVGrid(columns: columns, spacing: 12) {
+                        ForEach(filteredItems) { item in
+                            symbolCell(item)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, isSelecting ? 100 : 110)
+                }
+            }
+        case .settings:
+            SettingsView(
+                language: languageBinding,
+                accent: accentBinding,
+                exportSettings: $settings
+            )
+        case .downloads:
+            DownloadsView(
+                records: downloadRecords,
+                symbolCount: presentedCatalog.count,
+                onDownloadAll: exportAll,
+                onClearHistory: { downloadHistory = Data() }
+            )
         }
     }
 
@@ -134,6 +200,11 @@ struct ContentView: View {
             }
             Toggle(isOn: $showsSlash) {
                 Label("Slash 보기", systemImage: "circle.slash")
+            }
+            Picker("카테고리", selection: $category) {
+                ForEach(SymbolCategory.allCases) { option in
+                    Label(option.rawValue, systemImage: option.icon).tag(option)
+                }
             }
             Divider()
             Button {
@@ -165,7 +236,7 @@ struct ContentView: View {
 
     private var bottomControls: some View {
         VStack(spacing: 10) {
-            if isSearchPresented {
+            if currentSection == .icons && isSearchPresented {
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
@@ -189,50 +260,57 @@ struct ContentView: View {
             }
 
             HStack(spacing: 10) {
-                categoryBar
+                sectionBar
 
-                Button {
-                    withAnimation(.snappy) { isSearchPresented.toggle() }
-                } label: {
-                    Image(systemName: isSearchPresented ? "xmark" : "magnifyingglass")
-                        .font(.system(size: 23, weight: .semibold))
-                        .frame(width: 66, height: 66)
-                        .adaptiveGlass(cornerRadius: 33, interactive: true)
+                if currentSection == .icons {
+                    Button {
+                        withAnimation(.snappy) { isSearchPresented.toggle() }
+                    } label: {
+                        Image(systemName: isSearchPresented ? "xmark" : "magnifyingglass")
+                            .font(.system(size: 23, weight: .semibold))
+                            .frame(width: 66, height: 66)
+                            .adaptiveGlass(cornerRadius: 33, interactive: true)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(isSearchPresented ? "검색 닫기" : "검색 열기")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isSearchPresented ? "검색 닫기" : "검색 열기")
             }
         }
     }
 
-    private var categoryBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
-                ForEach(SymbolCategory.allCases) { option in
-                    Button {
-                        withAnimation(.snappy) { category = option }
-                    } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: option.icon)
-                                .font(.system(size: 20, weight: .semibold))
-                            Text(option.rawValue)
-                                .font(.caption2.weight(.semibold))
-                                .lineLimit(1)
+    private var sectionBar: some View {
+        HStack(spacing: 4) {
+            ForEach(AppSection.allCases) { section in
+                Button {
+                    withAnimation(.snappy) {
+                        currentSection = section
+                        if section != .icons {
+                            isSearchPresented = false
+                            isSelecting = false
+                            selection.removeAll()
                         }
-                        .frame(minWidth: 68, minHeight: 58)
-                        .foregroundStyle(category == option ? Color.accentColor : Color.primary)
-                        .background(
-                            category == option ? Color.primary.opacity(0.1) : Color.clear,
-                            in: RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        )
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(category == option ? .isSelected : [])
+                } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: section.icon)
+                            .font(.system(size: 20, weight: .semibold))
+                        Text(section.title)
+                            .font(.caption2.weight(.semibold))
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 58)
+                    .foregroundStyle(currentSection == section ? Color.accentColor : Color.primary)
+                    .background(
+                        currentSection == section ? Color.primary.opacity(0.1) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    )
                 }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(currentSection == section ? .isSelected : [])
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
         }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity)
         .frame(height: 66)
         .adaptiveGlass(cornerRadius: 33, interactive: true)
@@ -258,7 +336,7 @@ struct ContentView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.title3)
                             .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, Color.accentColor)
+                            .foregroundStyle(.black, Color.accentColor)
                     } else if favorites.contains(selectionKey) {
                         Image(systemName: "heart.fill")
                             .font(.caption)
@@ -323,7 +401,7 @@ struct ContentView: View {
                     .font(.headline)
                     .padding(.horizontal, 16)
                     .frame(height: 46)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.black)
                     .background(Color.accentColor, in: Capsule())
             }
             .disabled(selection.isEmpty)
@@ -347,6 +425,11 @@ struct ContentView: View {
             exportDocument = BinaryDocument(data: try SymbolExporter.data(for: item, settings: settings))
             exportType = settings.format == .png ? .png : .symbolSVG
             exportFilename = SymbolExporter.filename(for: item, settings: settings)
+            pendingDownload = DownloadRecord(
+                name: exportFilename,
+                format: settings.format.rawValue,
+                itemCount: 1
+            )
             selectedSymbol = nil
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(250))
@@ -363,10 +446,59 @@ struct ContentView: View {
             exportDocument = BinaryDocument(data: try SymbolExporter.zipData(for: items, settings: settings))
             exportType = .zip
             exportFilename = "SF-Symbols-\(items.count).zip"
+            pendingDownload = DownloadRecord(
+                name: exportFilename,
+                format: "ZIP · \(settings.format.rawValue)",
+                itemCount: items.count
+            )
             isExporting = true
         } catch {
             exportError = error.localizedDescription
         }
+    }
+
+    private func exportAll() {
+        do {
+            let items = presentedCatalog
+            exportDocument = BinaryDocument(data: try SymbolExporter.zipData(for: items, settings: settings))
+            exportType = .zip
+            exportFilename = "SF-Symbols-All-\(items.count).zip"
+            pendingDownload = DownloadRecord(
+                name: exportFilename,
+                format: "ZIP · \(settings.format.rawValue)",
+                itemCount: items.count
+            )
+            isExporting = true
+        } catch {
+            exportError = error.localizedDescription
+        }
+    }
+
+    private func addDownloadRecord(_ record: DownloadRecord) {
+        var updated = downloadRecords
+        updated.insert(record, at: 0)
+        if updated.count > 50 {
+            updated = Array(updated.prefix(50))
+        }
+        downloadHistory = (try? JSONEncoder().encode(updated)) ?? Data()
+    }
+
+    private func loadDefaultSettings() {
+        settings = ExportSettings(
+            size: defaultExportSize,
+            weight: SymbolWeight(rawValue: defaultExportWeight) ?? .regular,
+            format: ExportFormat(rawValue: defaultExportFormat) ?? .png,
+            background: ExportBackground(rawValue: defaultExportBackground) ?? .transparent,
+            tint: ExportTint(rawValue: defaultExportTint) ?? .primary
+        )
+    }
+
+    private func saveDefaultSettings(_ value: ExportSettings) {
+        defaultExportSize = value.size
+        defaultExportWeight = value.weight.rawValue
+        defaultExportFormat = value.format.rawValue
+        defaultExportBackground = value.background.rawValue
+        defaultExportTint = value.tint.rawValue
     }
 
     private func canonicalName(_ name: String) -> String {
