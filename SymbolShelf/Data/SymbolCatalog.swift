@@ -19,6 +19,14 @@ enum SymbolCatalog {
         ? fallbackItems
         : loadedCatalog.items
 
+    private static let itemsByName: [String: SymbolItem] = items.reduce(into: [:]) { result, item in
+        result[item.name] = item
+    }
+
+    static func item(named name: String) -> SymbolItem? {
+        itemsByName[name]
+    }
+
     static let families: [SymbolFamily] = makeFamilies(
         from: items,
         noFillToFill: loadedCatalog.noFillToFill
