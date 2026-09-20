@@ -20,6 +20,7 @@ struct ContentView: View {
     @State private var isExporting = false
     @State private var exportError: String?
     @State private var pendingDownload: DownloadRecord?
+    @Namespace private var categorySelectionNamespace
 
     @AppStorage("favoriteSymbols") private var favoriteSymbols = ""
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.korean.rawValue
@@ -227,10 +228,17 @@ struct ContentView: View {
                 categoryLabel(option, isSelected: true)
             }
             .buttonStyle(.plain)
-            .background(Color.accentColor.opacity(0.18), in: Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(Color.accentColor.opacity(0.32), lineWidth: 1)
+            .background {
+                ZStack {
+                    Capsule()
+                        .fill(Color.accentColor.opacity(0.18))
+                    Capsule()
+                        .stroke(Color.accentColor.opacity(0.32), lineWidth: 1)
+                }
+                .matchedGeometryEffect(
+                    id: "categorySelection",
+                    in: categorySelectionNamespace
+                )
             }
             .accessibilityAddTraits(.isSelected)
         } else {
@@ -247,10 +255,6 @@ struct ContentView: View {
         HStack(spacing: 6) {
             Image(systemName: option.icon)
             Text(option.rawValue)
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .font(.caption.bold())
-            }
         }
             .font(.subheadline.weight(isSelected ? .bold : .semibold))
             .foregroundStyle(.primary)
@@ -280,7 +284,7 @@ struct ContentView: View {
     }
 
     private func selectCategory(_ option: SymbolCategory) {
-        withAnimation(.snappy) {
+        withAnimation(.snappy(duration: 0.32)) {
             category = option
         }
     }
