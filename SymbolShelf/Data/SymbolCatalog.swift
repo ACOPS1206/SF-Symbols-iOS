@@ -24,6 +24,10 @@ enum SymbolCatalog {
         let order: [String] = decodePlist("symbol_order", from: bundle) ?? []
         let categoriesByName: [String: [String]] = decodePlist("symbol_categories", from: bundle) ?? [:]
         let searchTermsByName: [String: [String]] = decodePlist("symbol_search", from: bundle) ?? [:]
+        let nativeCategories: [CoreGlyphCategory] = decodePlist("categories", from: bundle) ?? []
+        let nativeCategoryRanks = Dictionary(
+            uniqueKeysWithValues: nativeCategories.enumerated().map { ($0.element.key, $0.offset) }
+        )
 
         // symbol_order is the primary source. The other two maps make the loader
         // resilient to symbols that are present in CoreGlyphs metadata but not in
@@ -50,16 +54,158 @@ enum SymbolCatalog {
             appendIfNeeded(name)
         }
 
-        return candidates.compactMap { name in
+        let entries: [CatalogEntry] = candidates.enumerated().compactMap { originalIndex, name in
             guard UIImage(systemName: name) != nil else { return nil }
-            return SymbolItem(
+
+            let categories = categoriesByName[name] ?? []
+            let item = SymbolItem(
                 name: name,
                 category: broadCategory(
-                    nativeCategories: categoriesByName[name] ?? [],
+                    nativeCategories: categories,
                     name: name
                 )
             )
+
+            let nativeRank = categories
+                .compactMap { nativeCategoryRanks[$0] }
+                .min() ?? Int.max
+
+            return CatalogEntry(
+                item: item,
+                family: familyKey(for: name),
+                nativeCategoryRank: nativeRank,
+                originalIndex: originalIndex
+            )
         }
+
+        return entries.sorted(by: relatedSymbolSort).map(\.item)
+    }
+
+    private struct CoreGlyphCategory: Decodable {
+        let key: String
+        let icon: String
+    }
+
+    private struct CatalogEntry {
+        let item: SymbolItem
+        let family: String
+        let nativeCategoryRank: Int
+        let originalIndex: Int
+    }
+
+    private static func relatedSymbolSort(_ lhs: CatalogEntry, _ rhs: CatalogEntry) -> Bool {
+        let lhsCategoryRank = categoryRank(lhs.item.category)
+        let rhsCategoryRank = categoryRank(rhs.item.category)
+
+        if lhsCategoryRank != rhsCategoryRank {
+            return lhsCategoryRank < rhsCategoryRank
+        }
+
+        let familyComparison = lhs.family.localizedStandardCompare(rhs.family)
+        if familyComparison != .orderedSame {
+            return familyComparison == .orderedAscending
+        }
+
+        if lhs.nativeCategoryRank != rhs.nativeCategoryRank {
+            return lhs.nativeCategoryRank < rhs.nativeCategoryRank
+        }
+
+        let lhsVariantRank = variantRank(lhs.item.name)
+        let rhsVariantRank = variantRank(rhs.item.name)
+        if lhsVariantRank != rhsVariantRank {
+            return lhsVariantRank < rhsVariantRank
+        }
+
+        return lhs.originalIndex < rhs.originalIndex
+    }
+
+    private static func categoryRank(_ category: SymbolCategory) -> Int {
+        switch category {
+        case .communication: 0
+        case .objects: 1
+        case .media: 2
+        case .weather: 3
+        case .transport: 4
+        case .people: 5
+        case .nature: 6
+        case .commerce: 7
+        case .system: 8
+        case .all: 9
+        case .favorites: 10
+        }
+    }
+
+    /// Groups visually/semantically related variants next to each other.
+    ///
+    /// Examples:
+    /// - person, person.fill, person.crop.circle -> "person"
+    /// - cloud.rain, cloud.snow, cloud.bolt -> "cloud"
+    /// - arrow.up, arrow.down, arrow.clockwise -> "arrow"
+    private static func familyKey(for name: String) -> String {
+        let lowered = name.lowercased()
+
+        let specialPrefixes: [(String, String)] = [
+            ("square.and.arrow.", "share"),
+            ("rectangle.and.pencil.and.ellipsis", "edit"),
+            ("rectangle.portrait.and.arrow.", "transfer"),
+            ("arrowtriangle.", "arrowtriangle"),
+            ("chevron.", "chevron"),
+            ("figure.", "figure"),
+            ("person.", "person"),
+            ("person", "person"),
+            ("hands.", "hand"),
+            ("hand.", "hand"),
+            ("cloud.", "cloud"),
+            ("cloud", "cloud"),
+            ("sun.", "sun"),
+            ("moon.", "moon"),
+            ("speaker.", "speaker"),
+            ("speaker", "speaker"),
+            ("waveform.", "waveform"),
+            ("music.", "music"),
+            ("music", "music"),
+            ("video.", "video"),
+            ("camera.", "camera"),
+            ("photo.", "photo"),
+            ("car.", "car"),
+            ("bus.", "bus"),
+            ("tram.", "tram"),
+            ("airplane.", "airplane"),
+            ("bicycle.", "bicycle"),
+            ("cart.", "cart"),
+            ("bag.", "bag"),
+            ("creditcard.", "creditcard"),
+            ("folder.", "folder"),
+            ("doc.", "doc"),
+            ("book.", "book"),
+            ("lock.", "lock"),
+            ("key.", "key"),
+            ("bell.", "bell"),
+            ("message.", "message"),
+            ("bubble.", "bubble"),
+            ("phone.", "phone"),
+            ("envelope.", "envelope"),
+            ("paperplane.", "paperplane"),
+            ("arrow.", "arrow")
+        ]
+
+        for (prefix, family) in specialPrefixes where lowered.hasPrefix(prefix) {
+            return family
+        }
+
+        return lowered.split(separator: ".").first.map(String.init) ?? lowered
+    }
+
+    private static func variantRank(_ name: String) -> Int {
+        let parts = Set(name.lowercased().split(separator: ".").map(String.init))
+
+        var rank = 0
+        if parts.contains("fill") { rank += 1 }
+        if parts.contains("slash") { rank += 2 }
+        if parts.contains("badge") { rank += 4 }
+        if parts.contains("circle") { rank += 8 }
+        if parts.contains("square") { rank += 16 }
+        return rank
     }
 
     private static func decodePlist<T: Decodable>(
