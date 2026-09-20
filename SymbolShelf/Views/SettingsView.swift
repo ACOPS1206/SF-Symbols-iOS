@@ -72,12 +72,30 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.navigationLink)
 
-                Picker("아이콘 색", selection: $exportSettings.tint) {
-                    ForEach(ExportTint.allCases) { option in
+                Picker("렌더링", selection: $exportSettings.renderingStyle) {
+                    ForEach(SymbolRenderingStyle.allCases) { option in
                         Text(option.rawValue).tag(option)
                     }
                 }
                 .pickerStyle(.navigationLink)
+
+                if exportSettings.renderingStyle != .multicolor {
+                    Picker(exportSettings.renderingStyle == .palette ? "주 색상" : "아이콘 색", selection: $exportSettings.tint) {
+                        ForEach(ExportTint.allCases) { option in
+                            Text(option.rawValue).tag(option)
+                        }
+                    }
+                    .pickerStyle(.navigationLink)
+                }
+
+                if exportSettings.renderingStyle == .palette {
+                    Picker("보조 색상", selection: $exportSettings.secondaryTint) {
+                        ForEach(ExportTint.allCases) { option in
+                            Text(option.rawValue).tag(option)
+                        }
+                    }
+                    .pickerStyle(.navigationLink)
+                }
 
                 Picker("배경", selection: $exportSettings.background) {
                     ForEach(ExportBackground.allCases) { option in
@@ -85,6 +103,14 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.navigationLink)
+            }
+
+            Section {
+                Text("멀티컬러를 지원하지 않는 심볼은 시스템 기본 표현으로 표시됩니다.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("렌더링 안내")
             }
 
             Section {

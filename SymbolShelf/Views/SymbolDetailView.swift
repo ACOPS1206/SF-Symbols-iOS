@@ -57,8 +57,7 @@ struct SymbolDetailView: View {
             previewBackground
             Image(systemName: item.name)
                 .font(.system(size: 104, weight: settings.weight.fontWeight))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(settings.tint.color)
+                .symbolRenderingStyle(settings)
                 .contentTransition(.symbolEffect(.replace))
         }
         .frame(maxWidth: .infinity)
@@ -115,10 +114,34 @@ struct SymbolDetailView: View {
 
             Divider().padding(.leading, 44)
 
-            settingRow("색상", systemImage: "paintpalette") {
-                Picker("색상", selection: $settings.tint) {
-                    ForEach(ExportTint.allCases) { tint in
-                        Text(tint.rawValue).tag(tint)
+            settingRow("렌더링", systemImage: "circle.lefthalf.filled") {
+                Picker("렌더링", selection: $settings.renderingStyle) {
+                    ForEach(SymbolRenderingStyle.allCases) { style in
+                        Text(style.rawValue).tag(style)
+                    }
+                }
+            }
+
+            if settings.renderingStyle != .multicolor {
+                Divider().padding(.leading, 44)
+
+                settingRow(settings.renderingStyle == .palette ? "주 색상" : "색상", systemImage: "paintpalette") {
+                    Picker("색상", selection: $settings.tint) {
+                        ForEach(ExportTint.allCases) { tint in
+                            Text(tint.rawValue).tag(tint)
+                        }
+                    }
+                }
+            }
+
+            if settings.renderingStyle == .palette {
+                Divider().padding(.leading, 44)
+
+                settingRow("보조 색상", systemImage: "paintpalette.fill") {
+                    Picker("보조 색상", selection: $settings.secondaryTint) {
+                        ForEach(ExportTint.allCases) { tint in
+                            Text(tint.rawValue).tag(tint)
+                        }
                     }
                 }
             }

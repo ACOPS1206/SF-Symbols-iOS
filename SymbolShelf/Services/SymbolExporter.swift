@@ -39,7 +39,9 @@ enum SymbolExporter {
             size: settings.size,
             weight: settings.weight.rawValue,
             background: settings.background.rawValue,
+            renderingStyle: settings.renderingStyle.rawValue,
             tint: settings.tint.rawValue,
+            secondaryTint: settings.renderingStyle == .palette ? settings.secondaryTint.rawValue : nil,
             vectorPathsIncluded: false,
             symbols: items.map(\.name)
         )
@@ -65,7 +67,7 @@ enum SymbolExporter {
             throw SymbolExportError.unavailable(item.name)
         }
 
-        let image = base.withTintColor(settings.tint.uiColor, renderingMode: .alwaysOriginal)
+        let image = renderedImage(base, settings: settings)
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = settings.background != .transparent
@@ -93,6 +95,27 @@ enum SymbolExporter {
             throw SymbolExportError.renderingFailed(item.name)
         }
         return data
+    }
+
+    private static func renderedImage(_ image: UIImage, settings: ExportSettings) -> UIImage {
+        switch settings.renderingStyle {
+        case .monochrome:
+            return image.withTintColor(settings.tint.uiColor, renderingMode: .alwaysOriginal)
+        case .hierarchical:
+            let configuration = UIImage.SymbolConfiguration(hierarchicalColor: settings.tint.uiColor)
+            return (image.applyingSymbolConfiguration(configuration) ?? image)
+                .withRenderingMode(.alwaysOriginal)
+        case .palette:
+            let configuration = UIImage.SymbolConfiguration(
+                paletteColors: [settings.tint.uiColor, settings.secondaryTint.uiColor]
+            )
+            return (image.applyingSymbolConfiguration(configuration) ?? image)
+                .withRenderingMode(.alwaysOriginal)
+        case .multicolor:
+            let configuration = UIImage.SymbolConfiguration.preferringMulticolor()
+            return (image.applyingSymbolConfiguration(configuration) ?? image)
+                .withRenderingMode(.alwaysOriginal)
+        }
     }
 
     private static func compatibleSVG(for item: SymbolItem, settings: ExportSettings, pngData: Data) -> Data {
@@ -126,7 +149,9 @@ enum SymbolExporter {
         let size: Int
         let weight: String
         let background: String
+        let renderingStyle: String
         let tint: String
+        let secondaryTint: String?
         let vectorPathsIncluded: Bool
         let symbols: [String]
     }
