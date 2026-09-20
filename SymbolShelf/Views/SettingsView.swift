@@ -58,12 +58,18 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.navigationLink)
 
-                Picker("크기", selection: $exportSettings.size) {
-                    ForEach([128, 256, 512, 1024], id: \.self) { size in
-                        Text("\(size) px").tag(size)
-                    }
+                if exportSettings.format == .svg {
+                    Toggle("SVG로 변환 [실험]", isOn: vectorizesSVGBinding)
                 }
-                .pickerStyle(.navigationLink)
+
+                if !exportSettings.usesVectorSVG {
+                    Picker(exportSettings.format == .svg ? "SVG 포함 PNG" : "크기", selection: $exportSettings.size) {
+                        ForEach([128, 256, 512, 1024], id: \.self) { size in
+                            Text("\(size) px").tag(size)
+                        }
+                    }
+                    .pickerStyle(.navigationLink)
+                }
 
                 Picker("굵기", selection: $exportSettings.weight) {
                     ForEach(SymbolWeight.allCases) { option in
@@ -72,12 +78,14 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.navigationLink)
 
-                Picker("렌더링", selection: $exportSettings.renderingStyle) {
-                    ForEach(SymbolRenderingStyle.allCases) { option in
-                        Text(option.rawValue).tag(option)
+                if !exportSettings.usesVectorSVG {
+                    Picker("렌더링", selection: $exportSettings.renderingStyle) {
+                        ForEach(SymbolRenderingStyle.allCases) { option in
+                            Text(option.rawValue).tag(option)
+                        }
                     }
+                    .pickerStyle(.navigationLink)
                 }
-                .pickerStyle(.navigationLink)
 
                 if exportSettings.renderingStyle != .multicolor {
                     Picker(exportSettings.renderingStyle == .palette ? "주 색상" : "아이콘 색", selection: $exportSettings.tint) {
@@ -105,6 +113,16 @@ struct SettingsView: View {
                 .pickerStyle(.navigationLink)
             }
 
+            if exportSettings.format == .svg {
+                Section {
+                    Text(svgDescription)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("SVG 안내")
+                }
+            }
+
             Section {
                 Text("멀티컬러를 지원하지 않는 심볼은 시스템 기본 표현으로 표시됩니다.")
                     .font(.footnote)
@@ -125,5 +143,24 @@ struct SettingsView: View {
         }
         .navigationTitle("설정")
         .navigationBarTitleDisplayMode(.large)
+    }
+
+    private var vectorizesSVGBinding: Binding<Bool> {
+        Binding(
+            get: { exportSettings.vectorizesSVG },
+            set: { enabled in
+                exportSettings.vectorizesSVG = enabled
+                if enabled {
+                    exportSettings.renderingStyle = .monochrome
+                }
+            }
+        )
+    }
+
+    private var svgDescription: String {
+        if exportSettings.usesVectorSVG {
+            return "고해상도 윤곽선을 추적해 단색 SVG 경로로 변환합니다. 원본 SF Symbol 경로가 아닌 실험적 근사치입니다."
+        }
+        return "호환 SVG는 원본 벡터 경로 대신 PNG를 포함하므로 포함 이미지의 해상도를 선택합니다."
     }
 }

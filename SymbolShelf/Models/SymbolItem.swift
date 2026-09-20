@@ -177,8 +177,13 @@ struct ExportSettings: Codable, Equatable {
     var size = 512
     var weight: SymbolWeight = .regular
     var format: ExportFormat = .png
+    var vectorizesSVG = false
     var background: ExportBackground = .transparent
     var renderingStyle: SymbolRenderingStyle = .hierarchical
     var tint: ExportTint = .primary
     var secondaryTint: ExportTint = .blue
+
+    var usesVectorSVG: Bool {
+        format == .svg && vectorizesSVG
+    }
 }

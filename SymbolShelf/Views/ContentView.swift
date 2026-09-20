@@ -23,6 +23,7 @@ struct ContentView: View {
     @State private var isExporting = false
     @State private var exportError: String?
     @State private var pendingDownload: DownloadRecord?
+    @State private var sharePayload: SharePayload?
 
     @AppStorage("favoriteSymbols") private var favoriteSymbols = ""
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.korean.rawValue
@@ -30,6 +31,7 @@ struct ContentView: View {
     @AppStorage("automaticallyGroupsSymbols") private var automaticallyGroupsSymbols = true
     @AppStorage("defaultExportSize") private var defaultExportSize = 512
     @AppStorage("defaultExportFormat") private var defaultExportFormat = ExportFormat.png.rawValue
+    @AppStorage("defaultVectorizesSVG") private var defaultVectorizesSVG = false
     @AppStorage("defaultExportWeight") private var defaultExportWeight = SymbolWeight.regular.rawValue
     @AppStorage("defaultExportBackground") private var defaultExportBackground = ExportBackground.transparent.rawValue
     @AppStorage("defaultRenderingStyle") private var defaultRenderingStyle = SymbolRenderingStyle.hierarchical.rawValue
@@ -101,7 +103,8 @@ struct ContentView: View {
                     isFavorite: favorites.contains(item.name),
                     settings: $settings,
                     onToggleFavorite: { toggleFavorite(item.name) },
-                    onExport: { exportSingle(item) }
+                    onExport: { exportSingle(item) },
+                    onShare: { shareSingle(item) }
                 )
                 .presentationDragIndicator(.visible)
             }
@@ -120,6 +123,11 @@ struct ContentView: View {
                     exportError = error.localizedDescription
                 }
                 pendingDownload = nil
+            }
+            .sheet(item: $sharePayload) { payload in
+                ShareSheet(payload: payload) { completed in
+                    finishSharing(payload, completed: completed)
+                }
             }
             .alert("내보내기 실패", isPresented: Binding(
                 get: { exportError != nil },
@@ -164,6 +172,7 @@ struct ContentView: View {
                         records: downloadRecords,
                         symbolCount: SymbolCatalog.items.count,
                         onDownloadAll: exportAll,
+                        onShareAll: shareAll,
                         onClearHistory: { downloadHistory = Data() }
                     )
                 }
@@ -490,14 +499,21 @@ struct ContentView: View {
                         Text(format.rawValue).tag(format)
                     }
                 }
-                Picker("크기", selection: $settings.size) {
-                    ForEach([128, 256, 512, 1024], id: \.self) { size in
-                        Text("\(size) px").tag(size)
+                if settings.format == .svg {
+                    Toggle("SVG로 변환 [실험]", isOn: vectorizesSVGBinding)
+                }
+                if !settings.usesVectorSVG {
+                    Picker(settings.format == .svg ? "포함 PNG" : "크기", selection: $settings.size) {
+                        ForEach([128, 256, 512, 1024], id: \.self) { size in
+                            Text("\(size) px").tag(size)
+                        }
                     }
                 }
-                Picker("렌더링", selection: $settings.renderingStyle) {
-                    ForEach(SymbolRenderingStyle.allCases) { style in
-                        Text(style.rawValue).tag(style)
+                if !settings.usesVectorSVG {
+                    Picker("렌더링", selection: $settings.renderingStyle) {
+                        ForEach(SymbolRenderingStyle.allCases) { style in
+                            Text(style.rawValue).tag(style)
+                        }
                     }
                 }
             } label: {
@@ -505,6 +521,16 @@ struct ContentView: View {
                     .frame(width: 44, height: 44)
             }
             .accessibilityLabel("내보내기 설정")
+
+            Button {
+                shareSelection()
+            } label: {
+                Image(systemName: "square.and.arrow.up")
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .disabled(selection.isEmpty)
+            .accessibilityLabel("선택한 아이콘 공유")
 
             Button {
                 exportSelection()
@@ -562,6 +588,43 @@ struct ContentView: View {
         }
     }
 
+    private func shareSingle(_ item: SymbolItem) {
+        do {
+            let filename = SymbolExporter.filename(for: item, settings: settings)
+            let record = DownloadRecord(name: filename, format: settings.format.rawValue, itemCount: 1)
+            let payload = try makeSharePayload(
+                data: SymbolExporter.data(for: item, settings: settings),
+                filename: filename,
+                record: record
+            )
+            selectedSymbol = nil
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(250))
+                sharePayload = payload
+            }
+        } catch {
+            exportError = error.localizedDescription
+        }
+    }
+
+    private func shareSelection() {
+        do {
+            let items = SymbolCatalog.items.filter { selection.contains($0.name) }
+            let filename = "SF-Symbols-\(items.count).zip"
+            sharePayload = try makeSharePayload(
+                data: SymbolExporter.zipData(for: items, settings: settings),
+                filename: filename,
+                record: DownloadRecord(
+                    name: filename,
+                    format: "ZIP · \(settings.format.rawValue)",
+                    itemCount: items.count
+                )
+            )
+        } catch {
+            exportError = error.localizedDescription
+        }
+    }
+
     private func exportAll() {
         do {
             let items = SymbolCatalog.items
@@ -572,6 +635,44 @@ struct ContentView: View {
             isExporting = true
         } catch {
             exportError = error.localizedDescription
+        }
+    }
+
+    private func shareAll() {
+        do {
+            let items = SymbolCatalog.items
+            let filename = "SF-Symbols-All-\(items.count).zip"
+            sharePayload = try makeSharePayload(
+                data: SymbolExporter.zipData(for: items, settings: settings),
+                filename: filename,
+                record: DownloadRecord(
+                    name: filename,
+                    format: "ZIP · \(settings.format.rawValue)",
+                    itemCount: items.count
+                )
+            )
+        } catch {
+            exportError = error.localizedDescription
+        }
+    }
+
+    private func makeSharePayload(data: Data, filename: String, record: DownloadRecord) throws -> SharePayload {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SymbolShelf-Share", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent(filename)
+        try data.write(to: fileURL, options: .atomic)
+        return SharePayload(fileURL: fileURL, record: record)
+    }
+
+    private func finishSharing(_ payload: SharePayload, completed: Bool) {
+        Task { @MainActor in
+            if completed {
+                addDownloadRecord(payload.record)
+            }
+            sharePayload = nil
+            try? FileManager.default.removeItem(at: payload.fileURL.deletingLastPathComponent())
         }
     }
 
@@ -586,6 +687,7 @@ struct ContentView: View {
             size: defaultExportSize,
             weight: SymbolWeight(rawValue: defaultExportWeight) ?? .regular,
             format: ExportFormat(rawValue: defaultExportFormat) ?? .png,
+            vectorizesSVG: defaultVectorizesSVG,
             background: ExportBackground(rawValue: defaultExportBackground) ?? .transparent,
             renderingStyle: SymbolRenderingStyle(rawValue: defaultRenderingStyle) ?? .hierarchical,
             tint: ExportTint(rawValue: defaultExportTint) ?? .primary,
@@ -597,10 +699,23 @@ struct ContentView: View {
         defaultExportSize = value.size
         defaultExportWeight = value.weight.rawValue
         defaultExportFormat = value.format.rawValue
+        defaultVectorizesSVG = value.vectorizesSVG
         defaultExportBackground = value.background.rawValue
         defaultRenderingStyle = value.renderingStyle.rawValue
         defaultExportTint = value.tint.rawValue
         defaultSecondaryTint = value.secondaryTint.rawValue
+    }
+
+    private var vectorizesSVGBinding: Binding<Bool> {
+        Binding(
+            get: { settings.vectorizesSVG },
+            set: { enabled in
+                settings.vectorizesSVG = enabled
+                if enabled {
+                    settings.renderingStyle = .monochrome
+                }
+            }
+        )
     }
 
     private func canonicalName(_ name: String) -> String {

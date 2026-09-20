@@ -15,11 +15,14 @@ enum SymbolExportError: LocalizedError {
 
 enum SymbolExporter {
     static func data(for item: SymbolItem, settings: ExportSettings) throws -> Data {
-        let png = try pngData(for: item, settings: settings)
         switch settings.format {
         case .png:
-            return png
+            return try pngData(for: item, settings: settings)
         case .svg:
+            if settings.usesVectorSVG {
+                return try SymbolVectorizer.svgData(for: item, settings: settings)
+            }
+            let png = try pngData(for: item, settings: settings)
             return compatibleSVG(for: item, settings: settings, pngData: png)
         }
     }
@@ -36,13 +39,13 @@ enum SymbolExporter {
             app: "SymbolShelf",
             exportedAt: ISO8601DateFormatter().string(from: Date()),
             format: settings.format.rawValue,
-            size: settings.size,
+            size: settings.usesVectorSVG ? nil : settings.size,
             weight: settings.weight.rawValue,
             background: settings.background.rawValue,
             renderingStyle: settings.renderingStyle.rawValue,
             tint: settings.tint.rawValue,
             secondaryTint: settings.renderingStyle == .palette ? settings.secondaryTint.rawValue : nil,
-            vectorPathsIncluded: false,
+            vectorPathsIncluded: settings.usesVectorSVG,
             symbols: items.map(\.name)
         )
         let encoder = JSONEncoder()
@@ -53,7 +56,10 @@ enum SymbolExporter {
     }
 
     static func filename(for item: SymbolItem, settings: ExportSettings) -> String {
-        "\(safeFilename(item.name))-\(settings.size).\(settings.format.fileExtension)"
+        if settings.usesVectorSVG {
+            return "\(safeFilename(item.name)).svg"
+        }
+        return "\(safeFilename(item.name))-\(settings.size).\(settings.format.fileExtension)"
     }
 
     private static func pngData(for item: SymbolItem, settings: ExportSettings) throws -> Data {
@@ -146,7 +152,7 @@ enum SymbolExporter {
         let app: String
         let exportedAt: String
         let format: String
-        let size: Int
+        let size: Int?
         let weight: String
         let background: String
         let renderingStyle: String
