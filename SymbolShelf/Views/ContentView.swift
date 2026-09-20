@@ -224,24 +224,35 @@ struct ContentView: View {
             Button {
                 selectCategory(option)
             } label: {
-                categoryLabel(option)
+                categoryLabel(option, isSelected: true)
             }
             .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: .capsule)
+            .background(Color.accentColor.opacity(0.18), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color.accentColor.opacity(0.32), lineWidth: 1)
+            }
             .accessibilityAddTraits(.isSelected)
         } else {
             Button {
                 selectCategory(option)
             } label: {
-                categoryLabel(option)
+                categoryLabel(option, isSelected: false)
             }
             .buttonStyle(.plain)
         }
     }
 
-    private func categoryLabel(_ option: SymbolCategory) -> some View {
-        Label(option.rawValue, systemImage: option.icon)
-            .font(.subheadline.weight(.semibold))
+    private func categoryLabel(_ option: SymbolCategory, isSelected: Bool) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: option.icon)
+            Text(option.rawValue)
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.caption.bold())
+            }
+        }
+            .font(.subheadline.weight(isSelected ? .bold : .semibold))
             .foregroundStyle(.primary)
             .lineLimit(1)
             .padding(.horizontal, 7)
