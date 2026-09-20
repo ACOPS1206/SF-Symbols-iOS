@@ -198,44 +198,89 @@ enum SymbolCatalog {
         return lowered.split(separator: ".").first.map(String.init) ?? lowered
     }
 
-    private static func displayFamilyKey(for name: String) -> String {
-        var parts = name.lowercased().split(separator: ".").map(String.init)
-        guard !parts.isEmpty else { return name.lowercased() }
+    /// Generic tokens that describe presentation/containers rather than the
+    /// semantic identity of a symbol. A token is only stripped when the inferred
+    /// parent actually exists in the catalog, or when multiple siblings provide
+    /// evidence that the parent is a real family root.
+    private static let structuralVariantTokens: Set<String> = [
+        "fill", "slash",
+        "circle", "square", "rectangle", "capsule",
+        "triangle", "diamond", "hexagon", "octagon", "shield"
+    ]
 
-        if let badgeIndex = parts.firstIndex(of: "badge") {
-            parts = Array(parts[..<badgeIndex])
+    /// SF Symbols appends locale identifiers such as .bn, .mr, .gu and .rtl to
+    /// localized glyph variants. Build the language-code set from Foundation
+    /// instead of maintaining a hard-coded list so new locales are picked up.
+    private static let localizationSuffixes: Set<String> = {
+        var result: Set<String> = ["rtl"]
+
+        for identifier in Locale.availableIdentifiers {
+            let normalized = identifier
+                .replacingOccurrences(of: "_", with: "-")
+                .lowercased()
+
+            guard let first = normalized.split(separator: "-").first else {
+                continue
+            }
+
+            let languageCode = String(first)
+            if (2...3).contains(languageCode.count) {
+                result.insert(languageCode)
+            }
         }
 
-        let visualModifiers: Set<String> = ["fill", "slash", "circle", "square"]
-        while let last = parts.last, visualModifiers.contains(last) {
-            parts.removeLast()
-        }
+        return result
+    }()
 
-        return parts.isEmpty ? name.lowercased() : parts.joined(separator: ".")
-    }
-
+    /// Builds families by inferring a parent/child graph from the symbol names.
+    ///
+    /// Examples:
+    /// character.bubble.fill.bn -> character.bubble.fill -> character.bubble
+    /// arrow.up.circle.fill     -> arrow.up.circle -> arrow.up
+    /// person.badge.plus        -> person
+    ///
+    /// Semantic suffixes such as ".rain" are not removed, so cloud.rain does
+    /// not collapse into cloud just because the names share a prefix.
     private static func makeFamilies(from items: [SymbolItem]) -> [SymbolFamily] {
+        let allNames = Set(items.map { $0.name.lowercased() })
+        let descendantCounts = inferredDescendantCounts(for: allNames)
+
         var orderedKeys: [String] = []
         var groups: [String: [SymbolItem]] = [:]
 
         for item in items {
-            let key = displayFamilyKey(for: item.name)
+            let key = inferredFamilyRoot(
+                for: item.name,
+                allNames: allNames,
+                descendantCounts: descendantCounts
+            )
+
             if groups[key] == nil {
                 orderedKeys.append(key)
                 groups[key] = []
             }
+
             groups[key, default: []].append(item)
         }
 
         return orderedKeys.compactMap { key in
-            guard let variants = groups[key], !variants.isEmpty else { return nil }
+            guard let variants = groups[key], !variants.isEmpty else {
+                return nil
+            }
 
-            let representative = variants.first(where: { $0.name == key })
+            let representative = variants.first(where: { $0.name.lowercased() == key })
                 ?? variants.min {
                     let lhsRank = variantRank($0.name)
                     let rhsRank = variantRank($1.name)
-                    if lhsRank != rhsRank { return lhsRank < rhsRank }
-                    if $0.name.count != $1.name.count { return $0.name.count < $1.name.count }
+
+                    if lhsRank != rhsRank {
+                        return lhsRank < rhsRank
+                    }
+
+                    if $0.name.count != $1.name.count {
+                        return $0.name.count < $1.name.count
+                    }
+
                     return $0.name < $1.name
                 }
                 ?? variants[0]
@@ -246,6 +291,114 @@ enum SymbolCatalog {
                 variants: variants
             )
         }
+    }
+
+    private static func inferredFamilyRoot(
+        for name: String,
+        allNames: Set<String>,
+        descendantCounts: [String: Int]
+    ) -> String {
+        var current = name.lowercased()
+        var visited: Set<String> = []
+
+        while visited.insert(current).inserted {
+            guard let parent = inferredParent(
+                of: current,
+                allNames: allNames,
+                descendantCounts: descendantCounts
+            ) else {
+                break
+            }
+
+            current = parent
+        }
+
+        return current
+    }
+
+    private static func inferredParent(
+        of name: String,
+        allNames: Set<String>,
+        descendantCounts: [String: Int]
+    ) -> String? {
+        for candidate in immediateParentCandidates(for: name) {
+            let parentExists = allNames.contains(candidate)
+            let hasSiblingEvidence = (descendantCounts[candidate] ?? 0) >= 2
+
+            if parentExists || hasSiblingEvidence {
+                return candidate
+            }
+        }
+
+        return nil
+    }
+
+    /// Candidate order matters: remove a locale/presentation wrapper first, then
+    /// a badge branch, then numeric variants. This allows chains such as
+    /// character.bubble.fill.bn to converge naturally on character.bubble.
+    private static func immediateParentCandidates(for name: String) -> [String] {
+        let parts = name.lowercased().split(separator: ".").map(String.init)
+        guard parts.count > 1 else {
+            return []
+        }
+
+        var candidates: [String] = []
+
+        func append(_ parts: ArraySlice<String>) {
+            guard !parts.isEmpty else { return }
+            let candidate = parts.joined(separator: ".")
+            if candidate != name && !candidates.contains(candidate) {
+                candidates.append(candidate)
+            }
+        }
+
+        if let last = parts.last,
+           localizationSuffixes.contains(last) {
+            append(parts.dropLast())
+        }
+
+        if let last = parts.last,
+           structuralVariantTokens.contains(last) {
+            append(parts.dropLast())
+        }
+
+        if let badgeIndex = parts.lastIndex(of: "badge"),
+           badgeIndex > 0 {
+            append(parts[..<badgeIndex])
+        }
+
+        if let last = parts.last,
+           Int(last) != nil {
+            append(parts.dropLast())
+        }
+
+        return candidates
+    }
+
+    /// Counts how many distinct real symbols can collapse to each inferred
+    /// ancestor. This lets us recognize synthetic roots such as person.crop
+    /// even when no literal "person.crop" SF Symbol exists.
+    private static func inferredDescendantCounts(
+        for allNames: Set<String>
+    ) -> [String: Int] {
+        var descendants: [String: Set<String>] = [:]
+
+        for originalName in allNames {
+            var queue = [originalName]
+            var visited: Set<String> = [originalName]
+
+            while !queue.isEmpty {
+                let current = queue.removeFirst()
+
+                for candidate in immediateParentCandidates(for: current)
+                where visited.insert(candidate).inserted {
+                    descendants[candidate, default: []].insert(originalName)
+                    queue.append(candidate)
+                }
+            }
+        }
+
+        return descendants.mapValues(\.count)
     }
 
     private static func variantRank(_ name: String) -> Int {
