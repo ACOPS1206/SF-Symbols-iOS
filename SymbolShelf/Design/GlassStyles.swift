@@ -32,7 +32,7 @@ extension View {
         isEnabled: Bool,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.1, *) {
             self.tabViewBottomAccessory(isEnabled: isEnabled) {
                 content()
             }
