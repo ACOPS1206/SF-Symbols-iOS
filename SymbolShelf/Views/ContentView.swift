@@ -10,7 +10,7 @@ struct ContentView: View {
     @State private var selection = Set<String>()
     @State private var selectedSymbol: SymbolItem?
     @State private var isSelecting = false
-    @State private var isTopMenuExpanded = false
+    @State private var isSearchPresented = false
     @State private var showsFill = false
     @State private var showsSlash = false
     @State private var settings = ExportSettings()
@@ -77,17 +77,23 @@ struct ContentView: View {
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
-            .safeAreaInset(edge: .top, spacing: 8) {
-                topMenu
-                    .padding(.horizontal)
-                    .padding(.top, 4)
+            .safeAreaInset(edge: .top, spacing: 6) {
+                HStack {
+                    topMenuButton
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.top, 4)
             }
             .safeAreaInset(edge: .bottom) {
-                if isSelecting {
-                    selectionBar
-                        .padding(.horizontal)
-                        .padding(.bottom, 6)
+                VStack(spacing: 10) {
+                    if isSelecting {
+                        selectionBar
+                    }
+                    bottomControls
                 }
+                .padding(.horizontal)
+                .padding(.bottom, 6)
             }
             .sheet(item: $selectedSymbol) { item in
                 SymbolDetailView(
@@ -121,46 +127,45 @@ struct ContentView: View {
         }
     }
 
-    private var topMenu: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                Button {
-                    withAnimation(.snappy) { isTopMenuExpanded.toggle() }
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "square.grid.2x2")
-                            .font(.headline)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("SF Symbols")
-                                .font(.headline)
-                            Text("\(filteredItems.count)개 표시")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 4)
-                        Image(systemName: "chevron.down")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .rotationEffect(.degrees(isTopMenuExpanded ? 180 : 0))
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isTopMenuExpanded ? "상단 메뉴 접기" : "상단 메뉴 펼치기")
-
-                Button(isSelecting ? "완료" : "선택") {
-                    withAnimation(.snappy) {
-                        isSelecting.toggle()
-                        if !isSelecting { selection.removeAll() }
-                    }
-                }
-                .font(.subheadline.weight(.semibold))
-                .frame(minWidth: 52, minHeight: 44)
+    private var topMenuButton: some View {
+        Menu {
+            Toggle(isOn: $showsFill) {
+                Label("Fill 보기", systemImage: "circle.fill")
             }
+            Toggle(isOn: $showsSlash) {
+                Label("Slash 보기", systemImage: "circle.slash")
+            }
+            Divider()
+            Button {
+                withAnimation(.snappy) {
+                    isSelecting.toggle()
+                    if !isSelecting { selection.removeAll() }
+                }
+            } label: {
+                Label(isSelecting ? "선택 완료" : "여러 개 선택", systemImage: isSelecting ? "checkmark" : "checkmark.circle")
+            }
+            Button {
+                withAnimation(.snappy) {
+                    showsFill = false
+                    showsSlash = false
+                    category = .all
+                    query = ""
+                }
+            } label: {
+                Label("필터 초기화", systemImage: "arrow.counterclockwise")
+            }
+        } label: {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 22, weight: .semibold))
+                .frame(width: 58, height: 58)
+                .adaptiveGlass(cornerRadius: 29, interactive: true)
+        }
+        .accessibilityLabel("보기 메뉴")
+    }
 
-            if isTopMenuExpanded {
-                Divider()
-
+    private var bottomControls: some View {
+        VStack(spacing: 10) {
+            if isSearchPresented {
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
@@ -177,69 +182,60 @@ struct ContentView: View {
                         .accessibilityLabel("검색어 지우기")
                     }
                 }
-                .padding(.horizontal, 12)
-                .frame(height: 44)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding(.horizontal, 16)
+                .frame(height: 52)
+                .adaptiveGlass(cornerRadius: 26, interactive: true)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
 
-                HStack(spacing: 8) {
-                    variantToggle(title: "Fill 보기", systemImage: "circle.fill", isOn: $showsFill)
-                    variantToggle(title: "Slash 보기", systemImage: "circle.slash", isOn: $showsSlash)
-                    Spacer(minLength: 0)
+            HStack(spacing: 10) {
+                categoryBar
+
+                Button {
+                    withAnimation(.snappy) { isSearchPresented.toggle() }
+                } label: {
+                    Image(systemName: isSearchPresented ? "xmark" : "magnifyingglass")
+                        .font(.system(size: 23, weight: .semibold))
+                        .frame(width: 66, height: 66)
+                        .adaptiveGlass(cornerRadius: 33, interactive: true)
                 }
-
-                categoryStrip
-                    .padding(.horizontal, -14)
+                .buttonStyle(.plain)
+                .accessibilityLabel(isSearchPresented ? "검색 닫기" : "검색 열기")
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .adaptiveGlass(cornerRadius: isTopMenuExpanded ? 26 : 24, interactive: true)
     }
 
-    private func variantToggle(
-        title: String,
-        systemImage: String,
-        isOn: Binding<Bool>
-    ) -> some View {
-        Button {
-            withAnimation(.snappy) { isOn.wrappedValue.toggle() }
-        } label: {
-            Label(title, systemImage: systemImage)
-                .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 12)
-                .frame(minHeight: 40)
-                .foregroundStyle(isOn.wrappedValue ? Color.white : Color.primary)
-                .background(
-                    isOn.wrappedValue ? Color.accentColor : Color.secondary.opacity(0.12),
-                    in: Capsule()
-                )
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isOn.wrappedValue ? .isSelected : [])
-    }
-
-    private var categoryStrip: some View {
+    private var categoryBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: 4) {
                 ForEach(SymbolCategory.allCases) { option in
                     Button {
                         withAnimation(.snappy) { category = option }
                     } label: {
-                        Label(option.rawValue, systemImage: option.icon)
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 14)
-                            .frame(height: 40)
-                            .foregroundStyle(category == option ? .white : .primary)
-                            .background(category == option ? Color.accentColor : .clear, in: Capsule())
-                            .adaptiveGlass(cornerRadius: 20, interactive: true)
+                        VStack(spacing: 4) {
+                            Image(systemName: option.icon)
+                                .font(.system(size: 20, weight: .semibold))
+                            Text(option.rawValue)
+                                .font(.caption2.weight(.semibold))
+                                .lineLimit(1)
+                        }
+                        .frame(minWidth: 68, minHeight: 58)
+                        .foregroundStyle(category == option ? Color.accentColor : Color.primary)
+                        .background(
+                            category == option ? Color.primary.opacity(0.1) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        )
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(category == option ? .isSelected : [])
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 6)
             .padding(.vertical, 4)
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 66)
+        .adaptiveGlass(cornerRadius: 33, interactive: true)
     }
 
     private func symbolCell(_ item: SymbolItem) -> some View {
