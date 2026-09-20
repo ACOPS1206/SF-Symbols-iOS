@@ -4,6 +4,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case icons
     case settings
     case downloads
+    case search
 
     var id: String { rawValue }
 
@@ -12,6 +13,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .icons: "아이콘"
         case .settings: "설정"
         case .downloads: "다운로드"
+        case .search: "검색"
         }
     }
 
@@ -20,6 +22,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .icons: "square.grid.2x2"
         case .settings: "gearshape"
         case .downloads: "arrow.down.circle"
+        case .search: "magnifyingglass"
         }
     }
 }

@@ -1,6 +1,7 @@
 "아이콘" = "Icons";
 "설정" = "Settings";
 "다운로드" = "Downloads";
+"검색" = "Search";
 "전체" = "All";
 "즐겨찾기" = "Favorites";
 "소통" = "Communication";
@@ -17,6 +18,7 @@
 "카테고리" = "Category";
 "선택 완료" = "Done Selecting";
 "여러 개 선택" = "Select Multiple";
+"선택" = "Select";
 "필터 초기화" = "Reset Filters";
 "보기 메뉴" = "View Menu";
 "심볼 이름 검색" = "Search symbol names";

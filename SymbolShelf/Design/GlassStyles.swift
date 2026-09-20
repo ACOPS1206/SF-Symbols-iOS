@@ -17,6 +17,34 @@ extension View {
                 }
         }
     }
+
+    @ViewBuilder
+    func nativeTabBarBehavior() -> some View {
+        if #available(iOS 26.0, *) {
+            self.tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func adaptiveTabAccessory<Content: View>(
+        isEnabled: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        if #available(iOS 26.0, *) {
+            self.tabViewBottomAccessory(isEnabled: isEnabled) {
+                content()
+            }
+        } else {
+            self.safeAreaInset(edge: .bottom) {
+                if isEnabled {
+                    content()
+                        .background(.ultraThinMaterial)
+                }
+            }
+        }
+    }
 }
 
 struct AmbientBackground: View {
