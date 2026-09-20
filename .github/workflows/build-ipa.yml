@@ -32,7 +32,7 @@ jobs:
           set -o pipefail
           xcodebuild \
             -project SymbolShelf.xcodeproj \
-            -target SymbolShelf \
+            -scheme SymbolShelf \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
