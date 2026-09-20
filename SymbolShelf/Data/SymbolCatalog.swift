@@ -13,6 +13,8 @@ enum SymbolCatalog {
         return systemItems.isEmpty ? fallbackItems : systemItems
     }()
 
+    static let families: [SymbolFamily] = makeFamilies(from: items)
+
     private static func loadSystemCatalog() -> [SymbolItem] {
         // Force UIKit to load the CoreGlyphs bundle before looking it up.
         _ = UIImage(systemName: "tortoise")
@@ -194,6 +196,56 @@ enum SymbolCatalog {
         }
 
         return lowered.split(separator: ".").first.map(String.init) ?? lowered
+    }
+
+    private static func displayFamilyKey(for name: String) -> String {
+        var parts = name.lowercased().split(separator: ".").map(String.init)
+        guard !parts.isEmpty else { return name.lowercased() }
+
+        if let badgeIndex = parts.firstIndex(of: "badge") {
+            parts = Array(parts[..<badgeIndex])
+        }
+
+        let visualModifiers: Set<String> = ["fill", "slash", "circle", "square"]
+        while let last = parts.last, visualModifiers.contains(last) {
+            parts.removeLast()
+        }
+
+        return parts.isEmpty ? name.lowercased() : parts.joined(separator: ".")
+    }
+
+    private static func makeFamilies(from items: [SymbolItem]) -> [SymbolFamily] {
+        var orderedKeys: [String] = []
+        var groups: [String: [SymbolItem]] = [:]
+
+        for item in items {
+            let key = displayFamilyKey(for: item.name)
+            if groups[key] == nil {
+                orderedKeys.append(key)
+                groups[key] = []
+            }
+            groups[key, default: []].append(item)
+        }
+
+        return orderedKeys.compactMap { key in
+            guard let variants = groups[key], !variants.isEmpty else { return nil }
+
+            let representative = variants.first(where: { $0.name == key })
+                ?? variants.min {
+                    let lhsRank = variantRank($0.name)
+                    let rhsRank = variantRank($1.name)
+                    if lhsRank != rhsRank { return lhsRank < rhsRank }
+                    if $0.name.count != $1.name.count { return $0.name.count < $1.name.count }
+                    return $0.name < $1.name
+                }
+                ?? variants[0]
+
+            return SymbolFamily(
+                key: key,
+                representative: representative,
+                variants: variants
+            )
+        }
     }
 
     private static func variantRank(_ name: String) -> Int {

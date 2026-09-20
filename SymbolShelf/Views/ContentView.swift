@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var category: SymbolCategory = .all
     @State private var highlightedCategory: SymbolCategory = .all
     @State private var selection = Set<String>()
+    @State private var selectedFamily: SymbolFamily?
     @State private var selectedSymbol: SymbolItem?
     @State private var isSelecting = false
     @State private var showsFill = false
@@ -55,13 +56,8 @@ struct ContentView: View {
         (try? JSONDecoder().decode([DownloadRecord].self, from: downloadHistory)) ?? []
     }
 
-    private var presentedCatalog: [SymbolItem] {
-        var seen = Set<String>()
-        return SymbolCatalog.items.compactMap { item in
-            let baseName = canonicalName(item.name)
-            guard seen.insert(baseName).inserted else { return nil }
-            return SymbolItem(name: presentedName(for: baseName), category: item.category)
-        }
+    private var presentedFamilies: [SymbolFamily] {
+        SymbolCatalog.families
     }
 
     var body: some View {
@@ -76,12 +72,29 @@ struct ContentView: View {
                     categoryBar
                 }
             }
+            .sheet(item: $selectedFamily) { family in
+                SymbolFamilyPickerView(
+                    family: family,
+                    favorites: favorites,
+                    selection: $selection,
+                    isSelecting: isSelecting,
+                    onChoose: { item in
+                        selectedFamily = nil
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(180))
+                            selectedSymbol = item
+                        }
+                    }
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
             .sheet(item: $selectedSymbol) { item in
                 SymbolDetailView(
                     item: item,
-                    isFavorite: favorites.contains(canonicalName(item.name)),
+                    isFavorite: favorites.contains(item.name),
                     settings: $settings,
-                    onToggleFavorite: { toggleFavorite(canonicalName(item.name)) },
+                    onToggleFavorite: { toggleFavorite(item.name) },
                     onExport: { exportSingle(item) }
                 )
                 .presentationDragIndicator(.visible)
@@ -142,7 +155,7 @@ struct ContentView: View {
                 NavigationStack {
                     DownloadsView(
                         records: downloadRecords,
-                        symbolCount: presentedCatalog.count,
+                        symbolCount: SymbolCatalog.items.count,
                         onDownloadAll: exportAll,
                         onClearHistory: { downloadHistory = Data() }
                     )
@@ -311,14 +324,14 @@ struct ContentView: View {
 
     @ViewBuilder
     private func iconGrid(searchEnabled: Bool) -> some View {
-        let items = filteredItems(searchEnabled: searchEnabled)
-        if items.isEmpty {
+        let families = filteredFamilies(searchEnabled: searchEnabled)
+        if families.isEmpty {
             ContentUnavailableView.search(text: query)
                 .frame(minHeight: 420)
         } else {
             LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(items) { item in
-                    symbolCell(item)
+                ForEach(families) { family in
+                    familyCell(family)
                 }
             }
             .padding(.horizontal)
@@ -348,74 +361,97 @@ struct ContentView: View {
         .accessibilityLabel("보기 메뉴")
     }
 
-    private func filteredItems(searchEnabled: Bool) -> [SymbolItem] {
-        presentedCatalog.filter { item in
-            let baseName = canonicalName(item.name)
+    private func filteredFamilies(searchEnabled: Bool) -> [SymbolFamily] {
+        presentedFamilies.filter { family in
             let categoryMatches: Bool
             switch category {
-            case .all: categoryMatches = true
-            case .favorites: categoryMatches = favorites.contains(baseName)
-            default: categoryMatches = item.category == category
+            case .all:
+                categoryMatches = true
+            case .favorites:
+                categoryMatches = family.variants.contains { favorites.contains($0.name) }
+            default:
+                categoryMatches = family.category == category
             }
 
             guard searchEnabled else { return categoryMatches }
+
             let queryMatches = query.isEmpty
-                || item.name.localizedCaseInsensitiveContains(query)
-                || baseName.localizedCaseInsensitiveContains(query)
-                || item.title.localizedCaseInsensitiveContains(query)
-                || item.category.rawValue.localizedCaseInsensitiveContains(query)
+                || family.key.localizedCaseInsensitiveContains(query)
+                || family.title.localizedCaseInsensitiveContains(query)
+                || family.category.rawValue.localizedCaseInsensitiveContains(query)
+                || family.variants.contains {
+                    $0.name.localizedCaseInsensitiveContains(query)
+                        || $0.title.localizedCaseInsensitiveContains(query)
+                }
+
             return categoryMatches && queryMatches
         }
     }
 
-    private func symbolCell(_ item: SymbolItem) -> some View {
-        let selectionKey = canonicalName(item.name)
-        return Button {
-            if isSelecting {
-                toggleSelection(selectionKey)
-            } else {
-                selectedSymbol = item
+    private func familyCell(_ family: SymbolFamily) -> some View {
+        let item = displayedRepresentative(for: family)
+        let selectedCount = family.variants.reduce(into: 0) { count, variant in
+            if selection.contains(variant.name) {
+                count += 1
             }
+        }
+        let hasFavorite = family.variants.contains { favorites.contains($0.name) }
+
+        return Button {
+            selectedFamily = family
         } label: {
-            VStack(spacing: 12) {
+            VStack(spacing: 10) {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: item.name)
                         .font(.system(size: 36, weight: .regular))
                         .symbolRenderingMode(.hierarchical)
                         .frame(maxWidth: .infinity, minHeight: 54)
 
-                    if selection.contains(selectionKey) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title3)
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(Color(.systemBackground), Color.accentColor)
-                    } else if favorites.contains(selectionKey) {
+                    if selectedCount > 0 {
+                        Text("\(selectedCount)")
+                            .font(.caption2.bold())
+                            .foregroundStyle(Color(.systemBackground))
+                            .frame(minWidth: 22, minHeight: 22)
+                            .background(Color.accentColor, in: Circle())
+                    } else if hasFavorite {
                         Image(systemName: "heart.fill")
                             .font(.caption)
                             .foregroundStyle(.pink)
                     }
                 }
 
-                Text(item.name)
+                Text(family.key)
                     .font(.caption.monospaced())
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
+
+                if family.variants.count > 1 {
+                    Text("\(family.variants.count)개")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(12)
             .frame(minHeight: 120)
             .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .adaptiveGlass(cornerRadius: 20, interactive: true)
             .overlay {
-                if selection.contains(selectionKey) {
+                if selectedCount > 0 {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .stroke(Color.accentColor, lineWidth: 2)
                 }
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(item.title)
-        .accessibilityHint(isSelecting ? "선택 상태를 전환합니다" : "상세 보기와 내보내기 설정을 엽니다")
+        .accessibilityLabel("\(family.title), \(family.variants.count)개 변형")
+        .accessibilityHint("패밀리 안의 개별 심볼을 엽니다")
+    }
+
+    private func displayedRepresentative(for family: SymbolFamily) -> SymbolItem {
+        let preferredName = presentedName(for: family.key)
+        return family.variants.first(where: { $0.name == preferredName })
+            ?? family.representative
     }
 
     private var selectionBar: some View {
@@ -490,7 +526,7 @@ struct ContentView: View {
 
     private func exportSelection() {
         do {
-            let items = presentedCatalog.filter { selection.contains(canonicalName($0.name)) }
+            let items = SymbolCatalog.items.filter { selection.contains($0.name) }
             exportDocument = BinaryDocument(data: try SymbolExporter.zipData(for: items, settings: settings))
             exportType = .zip
             exportFilename = "SF-Symbols-\(items.count).zip"
@@ -503,7 +539,7 @@ struct ContentView: View {
 
     private func exportAll() {
         do {
-            let items = presentedCatalog
+            let items = SymbolCatalog.items
             exportDocument = BinaryDocument(data: try SymbolExporter.zipData(for: items, settings: settings))
             exportType = .zip
             exportFilename = "SF-Symbols-All-\(items.count).zip"

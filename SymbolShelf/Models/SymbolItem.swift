@@ -19,6 +19,22 @@ struct SymbolItem: Identifiable, Hashable, Codable {
     }
 }
 
+struct SymbolFamily: Identifiable, Hashable {
+    let key: String
+    let representative: SymbolItem
+    let variants: [SymbolItem]
+
+    var id: String { key }
+    var category: SymbolCategory { representative.category }
+
+    var title: String {
+        key
+            .split(separator: ".")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
+    }
+}
+
 enum SymbolCategory: String, CaseIterable, Codable, Identifiable {
     case all = "전체"
     case favorites = "즐겨찾기"
