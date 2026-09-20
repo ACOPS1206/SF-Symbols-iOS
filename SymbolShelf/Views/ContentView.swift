@@ -2,6 +2,17 @@ import SwiftUI
 import UniformTypeIdentifiers
 import UIKit
 
+private struct CategoryBoundsPreferenceKey: PreferenceKey {
+    static let defaultValue: [String: Anchor<CGRect>] = [:]
+
+    static func reduce(
+        value: inout [String: Anchor<CGRect>],
+        nextValue: () -> [String: Anchor<CGRect>]
+    ) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
 struct ContentView: View {
     private let columns = [GridItem(.adaptive(minimum: 104, maximum: 150), spacing: 12)]
 
@@ -20,7 +31,6 @@ struct ContentView: View {
     @State private var isExporting = false
     @State private var exportError: String?
     @State private var pendingDownload: DownloadRecord?
-    @Namespace private var categorySelectionNamespace
 
     @AppStorage("favoriteSymbols") private var favoriteSymbols = ""
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.korean.rawValue
@@ -211,6 +221,26 @@ struct ContentView: View {
                     categoryButton(option)
                 }
             }
+            .backgroundPreferenceValue(CategoryBoundsPreferenceKey.self) { bounds in
+                GeometryReader { proxy in
+                    if let anchor = bounds[category.id] {
+                        let frame = proxy[anchor]
+                        ZStack {
+                            Capsule()
+                                .fill(Color.accentColor.opacity(0.18))
+                            Capsule()
+                                .stroke(Color.accentColor.opacity(0.32), lineWidth: 1)
+                        }
+                        .frame(width: frame.width, height: frame.height)
+                        .position(x: frame.midX, y: frame.midY)
+                        .animation(
+                            .spring(response: 0.34, dampingFraction: 0.82),
+                            value: category
+                        )
+                    }
+                }
+                .allowsHitTesting(false)
+            }
         }
         .contentMargins(.horizontal, 12, for: .scrollContent)
         .contentMargins(.vertical, 3, for: .scrollContent)
@@ -219,36 +249,18 @@ struct ContentView: View {
     }
 
     @available(iOS 26.0, *)
-    @ViewBuilder
     private func categoryButton(_ option: SymbolCategory) -> some View {
-        if category == option {
-            Button {
-                selectCategory(option)
-            } label: {
-                categoryLabel(option, isSelected: true)
-            }
-            .buttonStyle(.plain)
-            .background {
-                ZStack {
-                    Capsule()
-                        .fill(Color.accentColor.opacity(0.18))
-                    Capsule()
-                        .stroke(Color.accentColor.opacity(0.32), lineWidth: 1)
-                }
-                .matchedGeometryEffect(
-                    id: "categorySelection",
-                    in: categorySelectionNamespace
-                )
-            }
-            .accessibilityAddTraits(.isSelected)
-        } else {
-            Button {
-                selectCategory(option)
-            } label: {
-                categoryLabel(option, isSelected: false)
-            }
-            .buttonStyle(.plain)
+        let isSelected = category == option
+        return Button {
+            selectCategory(option)
+        } label: {
+            categoryLabel(option, isSelected: isSelected)
         }
+        .buttonStyle(.plain)
+        .anchorPreference(key: CategoryBoundsPreferenceKey.self, value: .bounds) {
+            [option.id: $0]
+        }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func categoryLabel(_ option: SymbolCategory, isSelected: Bool) -> some View {
@@ -284,9 +296,7 @@ struct ContentView: View {
     }
 
     private func selectCategory(_ option: SymbolCategory) {
-        withAnimation(.snappy(duration: 0.32)) {
-            category = option
-        }
+        category = option
     }
 
     @ViewBuilder
