@@ -205,15 +205,15 @@ struct ContentView: View {
     @available(iOS 26.0, *)
     private var liquidGlassCategoryBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
+            HStack(spacing: 6) {
                 ForEach(SymbolCategory.allCases) { option in
                     categoryButton(option)
                 }
             }
         }
         .contentMargins(.horizontal, 12, for: .scrollContent)
-        .contentMargins(.vertical, 6, for: .scrollContent)
-        .frame(minHeight: 54)
+        .contentMargins(.vertical, 3, for: .scrollContent)
+        .frame(minHeight: 48)
         .accessibilityLabel("카테고리")
     }
 
@@ -226,7 +226,9 @@ struct ContentView: View {
             } label: {
                 categoryLabel(option)
             }
-            .buttonStyle(.glassProminent)
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: .capsule)
+            .accessibilityAddTraits(.isSelected)
         } else {
             Button {
                 selectCategory(option)
@@ -240,9 +242,10 @@ struct ContentView: View {
     private func categoryLabel(_ option: SymbolCategory) -> some View {
         Label(option.rawValue, systemImage: option.icon)
             .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
             .lineLimit(1)
-            .padding(.horizontal, 8)
-            .frame(minHeight: 36)
+            .padding(.horizontal, 7)
+            .frame(minHeight: 34)
             .contentShape(Capsule())
     }
 
