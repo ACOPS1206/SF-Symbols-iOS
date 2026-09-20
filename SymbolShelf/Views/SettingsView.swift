@@ -70,10 +70,12 @@ struct SettingsView: View {
                 .pickerStyle(.navigationLink)
             }
 
-            Section("프로젝트") {
+            Section {
                 Link(destination: repositoryURL) {
                     Label("GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
                 }
+            } header: {
+                Text("프로젝트")
             } footer: {
                 Text("ACOPS1206/SF-Symbols-iOS")
             }
