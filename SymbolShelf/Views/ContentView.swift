@@ -406,12 +406,20 @@ struct ContentView: View {
 
     private func familyCell(_ family: SymbolFamily) -> some View {
         let item = displayedRepresentative(for: family)
-        let selectedCount = family.variants.reduce(into: 0) { count, variant in
-            if selection.contains(variant.name) {
-                count += 1
+        let selectedCount: Int
+        let hasFavorite: Bool
+
+        if automaticallyGroupsSymbols {
+            selectedCount = family.variants.reduce(into: 0) { count, variant in
+                if selection.contains(variant.name) {
+                    count += 1
+                }
             }
+            hasFavorite = family.variants.contains { favorites.contains($0.name) }
+        } else {
+            selectedCount = selection.contains(item.name) ? 1 : 0
+            hasFavorite = favorites.contains(item.name)
         }
-        let hasFavorite = family.variants.contains { favorites.contains($0.name) }
 
         return Button {
             if automaticallyGroupsSymbols && family.variants.count > 1 {
@@ -444,7 +452,7 @@ struct ContentView: View {
                     }
                 }
 
-                Text(family.key)
+                Text(automaticallyGroupsSymbols ? family.key : item.name)
                     .font(.caption.monospaced())
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
@@ -469,7 +477,11 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity)
-        .accessibilityLabel("\(family.title), \(family.variants.count)개 변형")
+        .accessibilityLabel(
+            automaticallyGroupsSymbols
+                ? "\(family.title), \(family.variants.count)개 변형"
+                : item.title
+        )
         .accessibilityHint(
             automaticallyGroupsSymbols && family.variants.count > 1
                 ? "패밀리 안의 개별 심볼을 엽니다"
@@ -478,6 +490,15 @@ struct ContentView: View {
     }
 
     private func displayedRepresentative(for family: SymbolFamily) -> SymbolItem {
+        if !automaticallyGroupsSymbols {
+            guard showsFill || showsSlash else {
+                return family.representative
+            }
+
+            let preferredName = presentedName(for: canonicalName(family.representative.name))
+            return SymbolCatalog.item(named: preferredName) ?? family.representative
+        }
+
         let preferredName = presentedName(for: family.key)
         return family.variants.first(where: { $0.name == preferredName })
             ?? family.representative
@@ -720,9 +741,7 @@ struct ContentView: View {
 
     private func canonicalName(_ name: String) -> String {
         var parts = name.split(separator: ".").map(String.init)
-        while let last = parts.last, last == "fill" || last == "slash" {
-            parts.removeLast()
-        }
+        parts.removeAll { $0 == "fill" || $0 == "slash" }
         return parts.joined(separator: ".")
     }
 
