@@ -27,6 +27,14 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Test symbol family classifier
+        run: |
+          xcrun swiftc \
+            SymbolShelf/Data/SymbolFamilyClassifier.swift \
+            Tests/SymbolFamilyClassifierSmokeTests.swift \
+            -o "$RUNNER_TEMP/SymbolFamilyClassifierTests"
+          "$RUNNER_TEMP/SymbolFamilyClassifierTests"
+
       - name: Build unsigned app
         run: |
           set -o pipefail

@@ -2,25 +2,34 @@ import Foundation
 import UIKit
 
 enum SymbolCatalog {
+    private struct LoadedCatalog {
+        let items: [SymbolItem]
+        let noFillToFill: [String: String]
+    }
+
+    private static let loadedCatalog = loadSystemCatalog()
+
     /// The complete SF Symbols catalog available on the current OS.
     ///
     /// iOS does not expose a public API that enumerates every SF Symbol name.
     /// CoreGlyphs contains the system's own catalog metadata, so we use it when
     /// available and fall back to the original built-in starter catalog if the
     /// metadata cannot be read.
-    static let items: [SymbolItem] = {
-        let systemItems = loadSystemCatalog()
-        return systemItems.isEmpty ? fallbackItems : systemItems
-    }()
+    static let items: [SymbolItem] = loadedCatalog.items.isEmpty
+        ? fallbackItems
+        : loadedCatalog.items
 
-    static let families: [SymbolFamily] = makeFamilies(from: items)
+    static let families: [SymbolFamily] = makeFamilies(
+        from: items,
+        noFillToFill: loadedCatalog.noFillToFill
+    )
 
-    private static func loadSystemCatalog() -> [SymbolItem] {
+    private static func loadSystemCatalog() -> LoadedCatalog {
         // Force UIKit to load the CoreGlyphs bundle before looking it up.
         _ = UIImage(systemName: "tortoise")
 
         guard let bundle = Bundle(identifier: "com.apple.CoreGlyphs") else {
-            return []
+            return LoadedCatalog(items: [], noFillToFill: [:])
         }
 
         let order: [String] = decodePlist("symbol_order", from: bundle) ?? []
@@ -80,7 +89,16 @@ enum SymbolCatalog {
             )
         }
 
-        return entries.sorted(by: relatedSymbolSort).map(\.item)
+        let noFillToFill: [String: String] = decodePropertyList(
+            "nofill_to_fill",
+            withExtension: "strings",
+            from: bundle
+        ) ?? [:]
+
+        return LoadedCatalog(
+            items: entries.sorted(by: relatedSymbolSort).map(\.item),
+            noFillToFill: noFillToFill
+        )
     }
 
     private struct CoreGlyphCategory: Decodable {
@@ -198,62 +216,20 @@ enum SymbolCatalog {
         return lowered.split(separator: ".").first.map(String.init) ?? lowered
     }
 
-    /// Generic tokens that describe presentation/containers rather than the
-    /// semantic identity of a symbol. A token is only stripped when the inferred
-    /// parent actually exists in the catalog, or when multiple siblings provide
-    /// evidence that the parent is a real family root.
-    private static let structuralVariantTokens: Set<String> = [
-        "fill", "slash",
-        "circle", "square", "rectangle", "capsule",
-        "triangle", "diamond", "hexagon", "octagon", "shield"
-    ]
-
-    /// SF Symbols appends locale identifiers such as .bn, .mr, .gu and .rtl to
-    /// localized glyph variants. Build the language-code set from Foundation
-    /// instead of maintaining a hard-coded list so new locales are picked up.
-    private static let localizationSuffixes: Set<String> = {
-        var result: Set<String> = ["rtl"]
-
-        for identifier in Locale.availableIdentifiers {
-            let normalized = identifier
-                .replacingOccurrences(of: "_", with: "-")
-                .lowercased()
-
-            guard let first = normalized.split(separator: "-").first else {
-                continue
-            }
-
-            let languageCode = String(first)
-            if (2...3).contains(languageCode.count) {
-                result.insert(languageCode)
-            }
-        }
-
-        return result
-    }()
-
-    /// Builds families by inferring a parent/child graph from the symbol names.
-    ///
-    /// Examples:
-    /// character.bubble.fill.bn -> character.bubble.fill -> character.bubble
-    /// arrow.up.circle.fill     -> arrow.up.circle -> arrow.up
-    /// person.badge.plus        -> person
-    ///
-    /// Semantic suffixes such as ".rain" are not removed, so cloud.rain does
-    /// not collapse into cloud just because the names share a prefix.
-    private static func makeFamilies(from items: [SymbolItem]) -> [SymbolFamily] {
-        let allNames = Set(items.map { $0.name.lowercased() })
-        let descendantCounts = inferredDescendantCounts(for: allNames)
+    private static func makeFamilies(
+        from items: [SymbolItem],
+        noFillToFill: [String: String]
+    ) -> [SymbolFamily] {
+        let classifier = SymbolFamilyClassifier.Index(
+            names: items.map(\.name),
+            noFillToFill: noFillToFill
+        )
 
         var orderedKeys: [String] = []
         var groups: [String: [SymbolItem]] = [:]
 
         for item in items {
-            let key = inferredFamilyRoot(
-                for: item.name,
-                allNames: allNames,
-                descendantCounts: descendantCounts
-            )
+            let key = classifier.familyKey(for: item.name)
 
             if groups[key] == nil {
                 orderedKeys.append(key)
@@ -293,114 +269,6 @@ enum SymbolCatalog {
         }
     }
 
-    private static func inferredFamilyRoot(
-        for name: String,
-        allNames: Set<String>,
-        descendantCounts: [String: Int]
-    ) -> String {
-        var current = name.lowercased()
-        var visited: Set<String> = []
-
-        while visited.insert(current).inserted {
-            guard let parent = inferredParent(
-                of: current,
-                allNames: allNames,
-                descendantCounts: descendantCounts
-            ) else {
-                break
-            }
-
-            current = parent
-        }
-
-        return current
-    }
-
-    private static func inferredParent(
-        of name: String,
-        allNames: Set<String>,
-        descendantCounts: [String: Int]
-    ) -> String? {
-        for candidate in immediateParentCandidates(for: name) {
-            let parentExists = allNames.contains(candidate)
-            let hasSiblingEvidence = (descendantCounts[candidate] ?? 0) >= 2
-
-            if parentExists || hasSiblingEvidence {
-                return candidate
-            }
-        }
-
-        return nil
-    }
-
-    /// Candidate order matters: remove a locale/presentation wrapper first, then
-    /// a badge branch, then numeric variants. This allows chains such as
-    /// character.bubble.fill.bn to converge naturally on character.bubble.
-    private static func immediateParentCandidates(for name: String) -> [String] {
-        let parts = name.lowercased().split(separator: ".").map(String.init)
-        guard parts.count > 1 else {
-            return []
-        }
-
-        var candidates: [String] = []
-
-        func append(_ parts: ArraySlice<String>) {
-            guard !parts.isEmpty else { return }
-            let candidate = parts.joined(separator: ".")
-            if candidate != name && !candidates.contains(candidate) {
-                candidates.append(candidate)
-            }
-        }
-
-        if let last = parts.last,
-           localizationSuffixes.contains(last) {
-            append(parts.dropLast())
-        }
-
-        if let last = parts.last,
-           structuralVariantTokens.contains(last) {
-            append(parts.dropLast())
-        }
-
-        if let badgeIndex = parts.lastIndex(of: "badge"),
-           badgeIndex > 0 {
-            append(parts[..<badgeIndex])
-        }
-
-        if let last = parts.last,
-           Int(last) != nil {
-            append(parts.dropLast())
-        }
-
-        return candidates
-    }
-
-    /// Counts how many distinct real symbols can collapse to each inferred
-    /// ancestor. This lets us recognize synthetic roots such as person.crop
-    /// even when no literal "person.crop" SF Symbol exists.
-    private static func inferredDescendantCounts(
-        for allNames: Set<String>
-    ) -> [String: Int] {
-        var descendants: [String: Set<String>] = [:]
-
-        for originalName in allNames {
-            var queue = [originalName]
-            var visited: Set<String> = [originalName]
-
-            while !queue.isEmpty {
-                let current = queue.removeFirst()
-
-                for candidate in immediateParentCandidates(for: current)
-                where visited.insert(candidate).inserted {
-                    descendants[candidate, default: []].insert(originalName)
-                    queue.append(candidate)
-                }
-            }
-        }
-
-        return descendants.mapValues(\.count)
-    }
-
     private static func variantRank(_ name: String) -> Int {
         let parts = Set(name.lowercased().split(separator: ".").map(String.init))
 
@@ -417,7 +285,15 @@ enum SymbolCatalog {
         _ name: String,
         from bundle: Bundle
     ) -> T? {
-        guard let url = bundle.url(forResource: name, withExtension: "plist"),
+        decodePropertyList(name, withExtension: "plist", from: bundle)
+    }
+
+    private static func decodePropertyList<T: Decodable>(
+        _ name: String,
+        withExtension fileExtension: String,
+        from bundle: Bundle
+    ) -> T? {
+        guard let url = bundle.url(forResource: name, withExtension: fileExtension),
               let data = try? Data(contentsOf: url)
         else {
             return nil
