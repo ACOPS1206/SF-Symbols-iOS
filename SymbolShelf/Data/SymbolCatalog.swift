@@ -28,11 +28,12 @@ enum SymbolCatalog {
         // symbol_order is the primary source. The other two maps make the loader
         // resilient to symbols that are present in CoreGlyphs metadata but not in
         // the ordered list on a particular OS release.
+        let estimatedCount = max(order.count, max(categoriesByName.count, searchTermsByName.count))
         var candidates: [String] = []
-        candidates.reserveCapacity(max(order.count, categoriesByName.count, searchTermsByName.count))
+        candidates.reserveCapacity(estimatedCount)
 
         var seen = Set<String>()
-        seen.reserveCapacity(candidates.capacity)
+        seen.reserveCapacity(estimatedCount)
 
         func appendIfNeeded(_ name: String) {
             guard seen.insert(name).inserted else { return }
@@ -123,6 +124,19 @@ enum SymbolCatalog {
 
         if containsAny(["objects", "tools", "devices", "home", "food", "education"]) {
             return .objects
+        }
+
+        // Use the symbol name as a final lightweight hint for entries without
+        // useful category metadata.
+        let loweredName = name.lowercased()
+        if loweredName.contains("cloud") || loweredName.contains("sun.") || loweredName.contains("moon.") {
+            return .weather
+        }
+        if loweredName.contains("car") || loweredName.contains("bus") || loweredName.contains("airplane") {
+            return .transport
+        }
+        if loweredName.contains("person") || loweredName.contains("figure.") || loweredName.contains("hand.") {
+            return .people
         }
 
         // Categories such as arrows, math, keyboard, shapes, controls,
